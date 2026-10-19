@@ -188,14 +188,23 @@ export function TreeView(p: Props) {
       
       if (panStart.current.moved) {
         const container = innerRef.current?.parentElement;
-        if (!container) return;
+        const grid = gridRef.current;
+        if (!container || !grid) return;
         
-        // Clamp pan so at least 100px of content stays visible
-        const minVisible = 100;
+        // Clamp based on actual grid bounds to ensure at least one card visible
+        // Use min(200px, 25% of viewport) as the minimum visible threshold
+        const minVisible = Math.min(200, container.clientWidth * 0.25, container.clientHeight * 0.25);
+        
+        // Get grid's actual bounding box (content without padding)
+        const gridBounds = grid.getBoundingClientRect();
+        const gridWidth = gridBounds.width * zoom;
+        const gridHeight = gridBounds.height * zoom;
+        
+        // Clamp so at least minVisible of grid stays within container
         const maxX = container.clientWidth - minVisible;
         const maxY = container.clientHeight - minVisible;
-        const minX = -(geo.w * zoom - minVisible);
-        const minY = -(geo.h * zoom - minVisible);
+        const minX = -(gridWidth - minVisible);
+        const minY = -(gridHeight - minVisible);
         
         const newX = Math.max(minX, Math.min(maxX, panStart.current.px + dx));
         const newY = Math.max(minY, Math.min(maxY, panStart.current.py + dy));

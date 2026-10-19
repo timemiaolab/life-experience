@@ -128,7 +128,7 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 @keyframes colflash { 0%, 100% { background: transparent } 25%, 60% { background: linear-gradient(180deg, color-mix(in srgb, var(--c) 14%, transparent), transparent) } }
 
 /* ---------- 缩放控制 ---------- */
-.zoom-controls { position: absolute; top: 12px; right: 12px; z-index: 10; display: flex; gap: 4px; align-items: center;
+.zoom-controls { position: absolute; bottom: 12px; right: 12px; z-index: 10; display: flex; gap: 4px; align-items: center;
   background: rgba(8, 12, 22, .92); border: 1px solid rgba(0, 240, 255, .4); padding: 4px 6px; font-family: var(--mono); pointer-events: all }
 .zoom-controls button { font-family: var(--mono); font-size: 14px; font-weight: 700; width: 26px; height: 26px; padding: 0;
   border: 1px solid rgba(0, 240, 255, .5); background: rgba(0, 240, 255, .08); color: var(--cyan); cursor: pointer; transition: .2s }

@@ -72,8 +72,28 @@ export async function fetchApprovedGraph(): Promise<FetchGraphResult> {
       .from('contributors')
       .select('id', { count: 'exact', head: true });
 
-    // Placeholder contributions for offline mode compatibility
+    // Fetch identity facets for filtering (without exposing contributor data)
+    const { data: facetsData, error: facetsError } = await supabase.rpc('get_identity_facets');
+    
+    // Transform facets into synthetic contributions for FilterBar compatibility
     const contributions: Contribution[] = [];
+    if (!facetsError && facetsData) {
+      facetsData.forEach((facet: any, idx: number) => {
+        contributions.push({
+          id: `facet-${idx}`,
+          identity: {
+            origin: facet.origin || '',
+            profession: facet.profession || '',
+            region: facet.region || '',
+            age: facet.age || '',
+          },
+          story: '',
+          createdAt: '',
+          sceneIds: facet.node_ids || [],
+          status: 'approved',
+        });
+      });
+    }
 
     const data: AppData = {
       version: 1,
