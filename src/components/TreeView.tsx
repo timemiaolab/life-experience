@@ -202,11 +202,27 @@ export function TreeView(p: Props) {
       gridLeft: grid.offsetLeft,
       gridTop: grid.offsetTop,
       zoom: zoomRef.current,
+      scrollLeft: container.scrollLeft,
+      scrollTop: container.scrollTop,
     };
+  };
+
+  const foldScrollIntoPan = () => {
+    const container = scrollRef.current;
+    if (!container) return;
+    if (container.scrollLeft || container.scrollTop) {
+      panRef.current = {
+        x: panRef.current.x - container.scrollLeft,
+        y: panRef.current.y - container.scrollTop,
+      };
+      container.scrollLeft = 0;
+      container.scrollTop = 0;
+    }
   };
 
   const applyPanZoom = (next: { x: number; y: number }, zoom = zoomRef.current) => {
     zoomRef.current = zoom;
+    foldScrollIntoPan();
     const box = panBox();
     panRef.current = box ? clampPan(next, { ...box, zoom }) : next;
     schedulePaint();
@@ -222,7 +238,14 @@ export function TreeView(p: Props) {
 
   const handleZoomIn = () => { applyPanZoom(panRef.current, Math.min(zoomRef.current * 1.2, 2.5)); persistZoom(); };
   const handleZoomOut = () => { applyPanZoom(panRef.current, Math.max(zoomRef.current / 1.2, 0.3)); persistZoom(); };
-  const handleZoomReset = () => { zoomRef.current = 1; panRef.current = { x: 0, y: 0 }; persistZoom(); schedulePaint(); };
+  const handleZoomReset = () => {
+    const c = scrollRef.current;
+    if (c) { c.scrollLeft = 0; c.scrollTop = 0; }
+    zoomRef.current = 1;
+    panRef.current = { x: 0, y: 0 };
+    persistZoom();
+    schedulePaint();
+  };
   const handleZoomFit = () => {
     const container = scrollRef.current;
     const g = geoRef.current;
@@ -301,6 +324,7 @@ export function TreeView(p: Props) {
   const handleMouseDown = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest('.node, button, .zoom-controls')) return;
+    foldScrollIntoPan();
     const start = { x: e.clientX, y: e.clientY, px: panRef.current.x, py: panRef.current.y, moved: false };
     e.preventDefault();
     const move = (ev: MouseEvent) => {
@@ -362,6 +386,14 @@ export function TreeView(p: Props) {
     window.addEventListener('resize', redraw);
     return () => { ro.disconnect(); window.removeEventListener('resize', redraw); cancelAnimationFrame(raf); };
   }, [recalc]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => applyPanZoom(panRef.current));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const colRefs = useRef(new Map<Layer, HTMLElement>());
   useEffect(() => {
