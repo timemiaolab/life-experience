@@ -48,7 +48,8 @@ export function TreeView(p: Props) {
   });
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
-  const panStart = useRef({ x: 0, y: 0, px: 0, py: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const panStart = useRef({ x: 0, y: 0, px: 0, py: 0, moved: false });
   
   // Save zoom to localStorage
   useEffect(() => {
@@ -56,7 +57,7 @@ export function TreeView(p: Props) {
   }, [zoom]);
   
   // Zoom handlers
-  const handleZoomIn = () => setZoom((z) => Math.min(z * 1.2, 3));
+  const handleZoomIn = () => setZoom((z) => Math.min(z * 1.2, 2.5));
   const handleZoomOut = () => setZoom((z) => Math.max(z / 1.2, 0.3));
   const handleZoomReset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
   const handleZoomFit = () => {
@@ -69,43 +70,150 @@ export function TreeView(p: Props) {
     setPan({ x: 0, y: 0 });
   };
   
-  // Wheel zoom: Ctrl/Cmd+wheel
+  // Smoother wheel zoom around cursor
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      const delta = -e.deltaY * 0.01;
-      setZoom((z) => Math.max(0.3, Math.min(3, z + delta * z * 0.5)));
+      
+      const container = innerRef.current?.parentElement;
+      if (!container) return;
+      
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      
+      const oldZoom = zoom;
+      const factor = Math.exp(-e.deltaY * 0.002);
+      const newZoom = Math.max(0.3, Math.min(2.5, oldZoom * factor));
+      
+      // Zoom around cursor position
+      const zoomChange = newZoom / oldZoom;
+      setPan((p) => ({
+        x: mouseX - (mouseX - p.x) * zoomChange,
+        y: mouseY - (mouseY - p.y) * zoomChange,
+      }));
+      setZoom(newZoom);
     };
-    const el = innerRef.current;
+    const el = innerRef.current?.parentElement;
     if (el) el.addEventListener('wheel', handleWheel, { passive: false });
     return () => el?.removeEventListener('wheel', handleWheel);
-  }, []);
+  }, [zoom]);
   
-  // Pan handlers
+  // Pinch zoom via pointer events
+  const pinchState = useRef<{ dist: number; zoom: number; pan: { x: number; y: number } } | null>(null);
+  useEffect(() => {
+    const container = innerRef.current?.parentElement;
+    if (!container) return;
+    
+    const pointers = new Map<number, PointerEvent>();
+    
+    const handlePointerDown = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') pointers.set(e.pointerId, e);
+    };
+    
+    const handlePointerMove = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      pointers.set(e.pointerId, e);
+      
+      if (pointers.size === 2) {
+        const [p1, p2] = Array.from(pointers.values());
+        const dx = p2.clientX - p1.clientX;
+        const dy = p2.clientY - p1.clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (!pinchState.current) {
+          pinchState.current = { dist, zoom, pan };
+        } else {
+          const scale = dist / pinchState.current.dist;
+          const newZoom = Math.max(0.3, Math.min(2.5, pinchState.current.zoom * scale));
+          
+          const rect = container.getBoundingClientRect();
+          const centerX = ((p1.clientX + p2.clientX) / 2) - rect.left;
+          const centerY = ((p1.clientY + p2.clientY) / 2) - rect.top;
+          
+          const zoomChange = newZoom / zoom;
+          setPan({
+            x: centerX - (centerX - pinchState.current.pan.x) * zoomChange,
+            y: centerY - (centerY - pinchState.current.pan.y) * zoomChange,
+          });
+          setZoom(newZoom);
+        }
+      }
+    };
+    
+    const handlePointerUp = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) pinchState.current = null;
+    };
+    
+    container.addEventListener('pointerdown', handlePointerDown);
+    container.addEventListener('pointermove', handlePointerMove);
+    container.addEventListener('pointerup', handlePointerUp);
+    container.addEventListener('pointercancel', handlePointerUp);
+    
+    return () => {
+      container.removeEventListener('pointerdown', handlePointerDown);
+      container.removeEventListener('pointermove', handlePointerMove);
+      container.removeEventListener('pointerup', handlePointerUp);
+      container.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [zoom, pan]);
+  
+  // Pan handlers with movement threshold
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.target === innerRef.current || (e.target as HTMLElement).classList.contains('tree-bg')) {
-      setIsPanning(true);
-      panStart.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
-      e.preventDefault();
-    }
+    const target = e.target as HTMLElement;
+    // Don't start pan on cards or buttons
+    if (target.closest('.node, button, .zoom-controls')) return;
+    
+    setIsPanning(true);
+    panStart.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y, moved: false };
+    e.preventDefault();
   };
   
   useEffect(() => {
     if (!isPanning) return;
+    
     const handleMouseMove = (e: MouseEvent) => {
       const dx = e.clientX - panStart.current.x;
       const dy = e.clientY - panStart.current.y;
-      setPan({ x: panStart.current.px + dx, y: panStart.current.py + dy });
+      
+      // Movement threshold: 5px
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        panStart.current.moved = true;
+        setIsDragging(true);
+      }
+      
+      if (panStart.current.moved) {
+        setPan({ x: panStart.current.px + dx, y: panStart.current.py + dy });
+      }
     };
-    const handleMouseUp = () => setIsPanning(false);
+    
+    const handleMouseUp = () => {
+      const wasDragging = panStart.current.moved;
+      setIsPanning(false);
+      setIsDragging(false);
+      
+      // Only trigger canvas click if didn't drag
+      if (!wasDragging) {
+        p.onCanvasClick();
+      }
+    };
+    
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isPanning, pan.x, pan.y]);
+  }, [isPanning, pan.x, pan.y, p]);
+  
+  // Clear hover when unlocking
+  useEffect(() => {
+    if (!locked) {
+      p.onHover(null);
+    }
+  }, [locked, p]);
 
   const visibleLinks = useMemo(
     () => data.links.filter(([a, b]) => view.visible.has(a) && view.visible.has(b) && idx.byId.has(a) && idx.byId.has(b)),
@@ -232,11 +340,7 @@ export function TreeView(p: Props) {
 
   const focusOn = !!focusSet;
   return (
-    <div className="scroll" onClick={(e) => { 
-      if (!(e.target as HTMLElement).closest('.node, .zoom-controls')) {
-        p.onCanvasClick();
-      }
-    }}>
+    <div className="scroll" onMouseDown={handleMouseDown}>
       <div className="zoom-controls">
         <button onClick={handleZoomIn} title="放大 (Ctrl/Cmd + Wheel)">+</button>
         <button onClick={handleZoomOut} title="缩小">−</button>
@@ -245,13 +349,12 @@ export function TreeView(p: Props) {
         <span className="zoom-level">{Math.round(zoom * 100)}%</span>
       </div>
       <div 
-        className={`inner${focusOn ? ' focus' : ''}${isPanning ? ' panning' : ''}`} 
+        className={`inner${focusOn ? ' focus' : ''}${isDragging ? ' panning' : ''}`} 
         ref={innerRef}
-        onMouseDown={handleMouseDown}
         style={{ 
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
           transformOrigin: '0 0',
-          cursor: isPanning ? 'grabbing' : 'default'
+          cursor: isDragging ? 'grabbing' : 'default'
         }}
       >
         <svg className="links" width={geo.w} height={geo.h} viewBox={`0 0 ${geo.w || 1} ${geo.h || 1}`} data-testid="links">

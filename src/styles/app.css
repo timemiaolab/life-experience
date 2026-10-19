@@ -107,7 +107,7 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 
 /* ---------- 树 ---------- */
 .body { flex: 1; min-height: 0; display: flex; position: relative }
-.scroll { flex: 1; min-width: 0; overflow: auto; position: relative }
+.scroll { flex: 1; min-width: 0; overflow: auto; position: relative; touch-action: none }
 .scroll::-webkit-scrollbar { height: 8px; width: 8px }
 .scroll::-webkit-scrollbar-thumb { background: rgba(0, 240, 255, .3) }
 .scroll::-webkit-scrollbar-track { background: transparent }
@@ -129,11 +129,13 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 
 /* ---------- 缩放控制 ---------- */
 .zoom-controls { position: absolute; top: 12px; right: 12px; z-index: 10; display: flex; gap: 4px; align-items: center;
-  background: rgba(8, 12, 22, .92); border: 1px solid rgba(0, 240, 255, .4); padding: 4px 6px; font-family: var(--mono) }
+  background: rgba(8, 12, 22, .92); border: 1px solid rgba(0, 240, 255, .4); padding: 4px 6px; font-family: var(--mono); pointer-events: all }
 .zoom-controls button { font-family: var(--mono); font-size: 14px; font-weight: 700; width: 26px; height: 26px; padding: 0;
   border: 1px solid rgba(0, 240, 255, .5); background: rgba(0, 240, 255, .08); color: var(--cyan); cursor: pointer; transition: .2s }
 .zoom-controls button:hover { background: rgba(0, 240, 255, .2); box-shadow: 0 0 10px rgba(0, 240, 255, .4) }
 .zoom-level { font-size: 10px; color: var(--dim); min-width: 36px; text-align: center; letter-spacing: .06em }
+
+.scroll { flex: 1; min-width: 0; overflow: hidden; position: relative; touch-action: none }
 
 /* ---------- 节点 ---------- */
 .node { --c: var(--cyan); position: relative; padding: 5px 8px 5px; cursor: pointer; color: var(--txt);
@@ -202,11 +204,9 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 .inner.focus .lk.on .flow { stroke-width: 2.6 }
 
 /* ---------- 详情面板 ---------- */
-.detail { position: fixed; right: 0; top: 0; bottom: 0; width: 0; overflow: hidden; transition: width .3s ease; border-left: 1px solid transparent; background: var(--panel); backdrop-filter: blur(6px); z-index: 50 }
+.detail { width: 0; overflow: hidden; transition: width .3s ease; border-left: 1px solid transparent; background: var(--panel); backdrop-filter: blur(6px); flex: none }
 .detail.open { width: 360px; border-left-color: var(--line); box-shadow: -10px 0 30px rgba(0, 0, 0, .5) }
-.detail-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .3); z-index: 49; display: none }
-.detail.open + .detail-overlay { display: block }
-.dp { width: 360px; height: 100%; overflow: auto; padding: 16px 18px 24px; --c: var(--cyan); position: relative; z-index: 51 }
+.dp { width: 360px; height: 100%; overflow: auto; padding: 16px 18px 24px; --c: var(--cyan) }
 .dp .top { display: flex; justify-content: space-between; align-items: center; font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--c) }
 .x { cursor: pointer; color: var(--dim); font-size: 15px; background: none; border: none; font-family: var(--mono) }
 .x:hover { color: #fff }

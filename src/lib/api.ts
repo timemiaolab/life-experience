@@ -67,27 +67,13 @@ export async function fetchApprovedGraph(): Promise<FetchGraphResult> {
 
     const links: Link[] = (linksData || []).map((l) => [l.from_id, l.to_id]);
 
-    // Fetch contributors (non-demo only for production count)
-    const { data: contributorsData } = await supabase
+    // Count total contributors (including demo) via head request
+    const { count: contributorCount } = await supabase
       .from('contributors')
-      .select('id, origin, profession, region, age, city, demo, created_at')
-      .eq('demo', false);
+      .select('id', { count: 'exact', head: true });
     
-    const contributions: Contribution[] = (contributorsData || []).map((c) => ({
-      id: c.id,
-      identity: {
-        origin: c.origin,
-        profession: c.profession,
-        region: c.region || '',
-        age: c.age,
-        city: c.city || undefined,
-      },
-      story: '', // Story text not fetched in Phase 1
-      createdAt: c.created_at,
-      sceneIds: [], // Scene mapping not available yet
-      engine: 'llm',
-      demo: c.demo,
-    }));
+    // Create placeholder contributions for the count display
+    const contributions: Contribution[] = [];
 
     const data: AppData = {
       version: 1,
@@ -96,6 +82,7 @@ export async function fetchApprovedGraph(): Promise<FetchGraphResult> {
       contributions,
       votes,
       myVotes: [],
+      contributorCount: contributorCount || 0,
     };
 
     return { success: true, data };

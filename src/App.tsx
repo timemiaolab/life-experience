@@ -124,6 +124,8 @@ export default function App() {
         activeLayer={(focusId && idx.byId.get(focusId)?.layer) || flashLayer?.k || null}
         onJump={(k) => { setFlashLayer({ k, t: Date.now() }); window.setTimeout(() => setFlashLayer((f) => (f && Date.now() - f.t >= 1500 ? null : f)), 1600); }}
         people={{ matched: view.matchedContribs.size, total: data.contributions.length }}
+        usingSupabase={usingSupabase}
+        data={data}
       />
       <main>
         <header>

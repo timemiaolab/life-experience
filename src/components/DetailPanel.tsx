@@ -55,7 +55,6 @@ export function DetailPanel({ node: n, data, idx, view, filterOn, locked, onSele
 
   return (
     <div className={`detail${locked ? ' open' : ''}`} data-testid="detail">
-      {locked && <div className="detail-overlay" onClick={() => onSelect(null)} />}
       <div className="dp" style={{ ['--c' as string]: L.color }}>
         <div className="top">
           <span>{L.en} · {codeOf(n, data.nodes)}</span>

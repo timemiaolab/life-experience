@@ -1,4 +1,4 @@
-import type { Layer } from '../types';
+import type { AppData, Layer } from '../types';
 import { LAYERS, layerOf } from '../lib/graph';
 
 interface Props {
@@ -6,6 +6,8 @@ interface Props {
   activeLayer: Layer | null;
   onJump: (k: Layer) => void;
   people: { matched: number; total: number };
+  usingSupabase: boolean;
+  data: AppData;
 }
 
 const CX = 140, W = 128, H = 42;
@@ -14,7 +16,7 @@ const FWD = ['总结', '提炼', '升华'];
 const BACK = ['检查', '优化', '影响'];
 
 /** 侧栏：纵向系统模型图（生活&工作 → 场景 → 原则 → 理念 → 人生意义） */
-export function Sidebar({ counts, activeLayer, onJump, people }: Props) {
+export function Sidebar({ counts, activeLayer, onJump, people, usingSupabase, data }: Props) {
   const ac = layerOf('area').color;
   const top = CARDS[0][1] - H / 2 - 12;
   const L = CX - W / 2, R = CX + W / 2 + 12, XL = 34, XR = 252;
@@ -87,7 +89,7 @@ export function Sidebar({ counts, activeLayer, onJump, people }: Props) {
       <div className="legend">
         <div className="row"><span className="sw" style={{ color: 'var(--cyan)' }} />左侧 · 正向：总结 / 提炼 / 升华</div>
         <div className="row"><span className="sw" style={{ color: 'var(--mag)' }} />右侧 · 反馈：检查 / 优化 / 影响</div>
-        <div className="row people">贡献者 <b>{people.matched}</b> / {people.total} 人</div>
+        <div className="row people">贡献者 <b>{people.matched}</b> / {people.total} 位 {usingSupabase && data.contributorCount ? `(总计 ${data.contributorCount})` : ''}</div>
         <div className="demo">⚠ DEMO DATA · 示例投稿均为虚构，仅供演示</div>
       </div>
     </aside>
