@@ -105,8 +105,8 @@ export interface SubmitStoryResult {
 }
 
 /**
- * Submit a new story to Supabase
- * Creates a contributor record and a submission record
+ * Submit a new story to Supabase using the submit_story RPC
+ * The RPC handles contributor creation and submission atomically
  */
 export async function submitStory(params: SubmitStoryParams): Promise<SubmitStoryResult> {
   if (!supabase) {
@@ -114,44 +114,17 @@ export async function submitStory(params: SubmitStoryParams): Promise<SubmitStor
   }
 
   try {
-    const submissionId = `sub_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-    const contributorId = `c_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    // Call the submit_story RPC function
+    const { data, error } = await supabase.rpc('submit_story', {
+      p_identity: params.identity,
+      p_story: params.story,
+    });
 
-    // Insert contributor
-    const { error: contributorError } = await supabase
-      .from('contributors')
-      .insert({
-        id: contributorId,
-        origin: params.identity.origin,
-        profession: params.identity.profession,
-        region: params.identity.region,
-        age: params.identity.age,
-        city: params.identity.city || null,
-        demo: false,
-      });
-
-    if (contributorError) {
-      // If contributor already exists (unlikely with our ID generation), that's OK
-      if (contributorError.code !== '23505') {
-        return { success: false, error: `Failed to create contributor: ${contributorError.message}` };
-      }
+    if (error) {
+      return { success: false, error: `Submission failed: ${error.message}` };
     }
 
-    // Insert submission
-    const { error: submissionError } = await supabase
-      .from('submissions')
-      .insert({
-        id: submissionId,
-        contributor_id: contributorId,
-        story: params.story,
-        status: 'pending',
-      });
-
-    if (submissionError) {
-      return { success: false, error: `Failed to create submission: ${submissionError.message}` };
-    }
-
-    return { success: true, submissionId };
+    return { success: true, submissionId: data as string };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { success: false, error: message };

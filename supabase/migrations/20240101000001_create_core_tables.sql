@@ -1,5 +1,6 @@
 -- Core tables for life-experience community
--- Vector dimension: 768 (compatible with Gemini text-embedding-004 free tier)
+-- Vector dimension: 768 (compatible with Gemini text-embedding-004 with outputDimensionality=768)
+-- Note: BGE-m3 uses 1024 dimensions; we chose 768 to support Gemini's free tier
 -- All migrations are idempotent
 
 -- ========== Contributors (identity tags only, no PII) ==========
@@ -18,7 +19,11 @@ CREATE INDEX IF NOT EXISTS idx_contributors_created_at ON contributors(created_a
 CREATE INDEX IF NOT EXISTS idx_contributors_demo ON contributors(demo) WHERE NOT demo;
 
 -- ========== Nodes (5-layer graph: area / scene / principle / idea / meaning) ==========
-CREATE TYPE node_layer AS ENUM ('area', 'scene', 'principle', 'idea', 'meaning');
+DO $$ BEGIN
+  CREATE TYPE node_layer AS ENUM ('area', 'scene', 'principle', 'idea', 'meaning');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS nodes (
   id TEXT PRIMARY KEY,
@@ -38,8 +43,9 @@ CREATE INDEX IF NOT EXISTS idx_nodes_contribution_id ON nodes(contribution_id) W
 CREATE INDEX IF NOT EXISTS idx_nodes_created_at ON nodes(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_nodes_demo ON nodes(demo) WHERE NOT demo;
 
--- ========== Principles with embedding vectors ==========
--- Embedding dimension: 768 (Gemini text-embedding-004 or BGE-m3)
+-- Principles with embedding vectors ==========
+-- Embedding dimension: 768 (Gemini text-embedding-004 with outputDimensionality=768)
+-- Note: BGE-m3 uses 1024-dim; we chose 768 for Gemini API compatibility
 -- Store embeddings for similarity-based principle merging
 CREATE TABLE IF NOT EXISTS principle_embeddings (
   principle_id TEXT PRIMARY KEY REFERENCES nodes(id) ON DELETE CASCADE,
@@ -69,7 +75,11 @@ CREATE INDEX IF NOT EXISTS idx_links_from_id ON links(from_id);
 CREATE INDEX IF NOT EXISTS idx_links_to_id ON links(to_id);
 
 -- ========== Submissions (raw stories awaiting AI processing) ==========
-CREATE TYPE submission_status AS ENUM ('pending', 'processing', 'ai_done', 'approved', 'rejected');
+DO $$ BEGIN
+  CREATE TYPE submission_status AS ENUM ('pending', 'processing', 'ai_done', 'approved', 'rejected');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS submissions (
   id TEXT PRIMARY KEY,

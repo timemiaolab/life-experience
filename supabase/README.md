@@ -6,7 +6,9 @@
 
 - **项目引用 (Ref)**: `fivighqyyxlhjhicuwvv`
 - **项目 URL**: `https://fivighqyyxlhjhicuwvv.supabase.co`
-- **嵌入向量维度**: 768 (Gemini text-embedding-004 or BGE-m3)
+- **嵌入向量维度**: 768
+  - 兼容：Gemini text-embedding-004 (outputDimensionality=768)
+  - 注意：BGE-m3 使用 1024 维，本项目选择 768 维以支持 Gemini API
 
 ## 数据库结构
 
@@ -70,6 +72,9 @@
 3. **20240101000002_setup_rls_policies.sql** - 设置 RLS 策略
 4. **20240101000003_approval_functions.sql** - 审核流程的 SECURITY DEFINER 函数
 5. **20240101000004_seed_demo_data.sql** - 导入示例数据（标记为 demo=true）
+6. **20240101000005_migration_tracking.sql** - 迁移追踪表（防止重复执行）
+7. **20240101000006_submit_story_rpc.sql** - 提交故事的 RPC 函数（anon 可调用）
+8. **20240101000007_security_fixes.sql** - 安全修复（RLS、函数权限、auth.uid()）
 
 ## 本地验证
 

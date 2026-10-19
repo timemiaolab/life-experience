@@ -268,9 +268,10 @@ life-experience/
 ### 后端
 
 - **数据库**: Supabase PostgreSQL 16 + pgvector (768 维)
-- **嵌入模型**: Gemini text-embedding-004 或 BGE-m3 (768 维)
+- **嵌入模型**: Gemini text-embedding-004 (outputDimensionality=768)
+  - 注意：BGE-m3 使用 1024 维，本项目为了兼容 Gemini 选择 768 维
 - **Edge Functions**: Deno + Supabase Functions CLI (Phase 2)
-- **迁移管理**: SQL 文件 + Management API
+- **迁移管理**: SQL 文件 + Management API + 追踪表
 
 ### AI 整理
 
