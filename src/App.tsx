@@ -24,17 +24,6 @@ export default function App() {
 
   const say = (text: string) => setToast({ text, t: Date.now() });
   
-  // Show loading state while fetching from Supabase
-  if (loading) {
-    return (
-      <div className="app">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#00f0ff' }}>
-          <div>加载中…</div>
-        </div>
-      </div>
-    );
-  }
-  
   const idx = useMemo(() => buildIndex(data), [data]);
   const view = useMemo(() => computeView(data, idx, filter), [data, idx, filter]);
   const order = useMemo(() => orderLayers(data.nodes, idx), [data.nodes, idx]);
@@ -81,6 +70,17 @@ export default function App() {
   }, [commit, filter]);
 
   const node = sel ? idx.byId.get(sel) ?? null : null;
+  
+  // Show loading state while fetching from Supabase
+  if (loading) {
+    return (
+      <div className="app">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#00f0ff' }}>
+          <div>加载中…</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app">
