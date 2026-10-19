@@ -14,6 +14,14 @@ export interface ExperienceDoc {
   age: string;
   city?: string;
   story: string;
+  /** 公开姓名或常用网名（整理稿） */
+  name?: string;
+  /** 整理者，如「编辑部」 */
+  curatedBy?: string;
+  sourceUrl?: string;
+  sourceTitle?: string;
+  sourcePublisher?: string;
+  sourceDate?: string;
 }
 
 const ALIAS: Record<string, string> = {
@@ -30,10 +38,49 @@ const ALIAS: Record<string, string> = {
   'age band': 'age',
   city: 'city',
   城市: 'city',
+  name: 'name',
+  handle: 'name',
+  contributor: 'name',
+  姓名: 'name',
+  署名: 'name',
+  curatedby: 'curatedBy',
+  curator: 'curatedBy',
+  整理: 'curatedBy',
+  sourceurl: 'sourceUrl',
+  source: 'sourceUrl',
+  url: 'sourceUrl',
+  来源: 'sourceUrl',
+  sourcetitle: 'sourceTitle',
+  来源标题: 'sourceTitle',
+  sourcepublisher: 'sourcePublisher',
+  publisher: 'sourcePublisher',
+  出版: 'sourcePublisher',
+  出处: 'sourcePublisher',
+  sourcedate: 'sourceDate',
+  publishedat: 'sourceDate',
+  日期: 'sourceDate',
+  发表日期: 'sourceDate',
 };
+
+const ALLOWED = 'title, origin/出身, profession/职业, region/地区, age/年龄段, city，以及可选来源字段 name/handle、curatedBy/整理、source/sourceUrl、sourceTitle、publisher/sourcePublisher、sourceDate';
 
 function charCount(s: string): number {
   return [...s.replace(/\s+/g, '')].length;
+}
+
+function normalizeDate(raw: string): string {
+  const parts = raw
+    .replace(/年/g, '-')
+    .replace(/月/g, '-')
+    .replace(/日/g, '')
+    .replace(/\./g, '-')
+    .replace(/\//g, '-')
+    .split('-')
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (parts.length >= 3) return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+  if (parts.length === 2) return `${parts[0]}-${parts[1].padStart(2, '0')}`;
+  return raw;
 }
 
 function parseFrontMatter(raw: string): { meta: Record<string, string>; body: string } {
@@ -51,7 +98,7 @@ function parseFrontMatter(raw: string): { meta: Record<string, string>; body: st
       val = val.slice(1, -1);
     }
     const canon = ALIAS[key.toLowerCase()] ?? ALIAS[key];
-    if (!canon) throw new Error(`未知字段「${key}」。允许：title, origin/出身, profession/职业, region/地区, age/年龄段, city`);
+    if (!canon) throw new Error(`未知字段「${key}」。允许：${ALLOWED}`);
     meta[canon] = val;
   }
   return { meta, body: m[2].trim() };
@@ -99,6 +146,15 @@ export function validateExperience(raw: string, file: string): { ok: true; doc: 
   if (n > MAX_STORY_CHARS) errors.push(`正文太长（${n} 字），请压缩到 ${MAX_STORY_CHARS} 字以内`);
   if (/```|<\s*script/i.test(body)) errors.push('正文请不要包含代码块或脚本（只讲经历）');
 
+  const sourceUrl = (meta.sourceUrl || '').trim();
+  if (sourceUrl && !/^https?:\/\/\S+$/i.test(sourceUrl)) {
+    errors.push('sourceUrl 须为 http(s) 链接');
+  }
+  const sourceDate = (meta.sourceDate || '').trim();
+  if (sourceDate && !/^\d{4}([-.\/年]\d{1,2}([-.\/月]\d{1,2}日?)?)?$/.test(sourceDate)) {
+    errors.push('sourceDate 请写成 YYYY-MM-DD 或 2024.03.16 这样的日期');
+  }
+
   if (errors.length) return { ok: false, errors };
   const doc: ExperienceDoc = {
     file: name,
@@ -110,6 +166,13 @@ export function validateExperience(raw: string, file: string): { ok: true; doc: 
     story: body,
   };
   if (meta.city?.trim()) doc.city = meta.city.trim();
+  if (meta.name?.trim()) doc.name = meta.name.trim();
+  if (meta.curatedBy?.trim()) doc.curatedBy = meta.curatedBy.trim();
+  else if (sourceUrl) doc.curatedBy = '编辑部';
+  if (sourceUrl) doc.sourceUrl = sourceUrl;
+  if (meta.sourceTitle?.trim()) doc.sourceTitle = meta.sourceTitle.trim();
+  if (meta.sourcePublisher?.trim()) doc.sourcePublisher = meta.sourcePublisher.trim();
+  if (sourceDate) doc.sourceDate = normalizeDate(sourceDate);
   return { ok: true, doc };
 }
 

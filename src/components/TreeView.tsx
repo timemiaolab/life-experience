@@ -11,9 +11,7 @@ interface Props {
   order: Record<Layer, GNode[]>;
   focusSet: Set<string> | null;
   selected: string | null;
-  locked: boolean;
   onSelect: (id: string | null) => void;
-  onHover: (id: string | null) => void;
   onCanvasClick: () => void;
   fresh: Set<string>;
   scrollTarget: { id: string; t: number } | null;
@@ -74,11 +72,11 @@ const LinkLayer = memo(function LinkLayer({ geo, focusSet, fresh }: { geo: { w: 
 });
 
 const NodeCard = memo(function NodeCard({
-  n, on, selected, locked, onHover, onSelect, register,
+  n, on, selected, onSelect, register,
   data, idx, view, originFilter, filterOn, fresh,
 }: {
-  n: GNode; on: boolean; selected: boolean; locked: boolean;
-  onHover: (id: string | null) => void; onSelect: (id: string) => void;
+  n: GNode; on: boolean; selected: boolean;
+  onSelect: (id: string) => void;
   register: (id: string, el: HTMLDivElement | null) => void;
   data: AppData; idx: Index; view: View; originFilter: string[]; filterOn: boolean; fresh: Set<string>;
 }) {
@@ -143,8 +141,6 @@ const NodeCard = memo(function NodeCard({
       data-id={n.id}
       data-layer={n.layer}
       ref={(el) => register(n.id, el)}
-      onMouseEnter={() => { if (!locked) onHover(n.id); }}
-      onMouseLeave={() => { if (!locked) onHover(null); }}
       onClick={(e) => { e.stopPropagation(); onSelect(n.id); }}
     >
       {body}
@@ -153,7 +149,7 @@ const NodeCard = memo(function NodeCard({
 });
 
 export function TreeView(p: Props) {
-  const { data, idx, view, order, focusSet, selected, locked, fresh } = p;
+  const { data, idx, view, order, focusSet, selected, fresh } = p;
   const innerRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -496,12 +492,6 @@ export function TreeView(p: Props) {
     window.addEventListener('mouseup', up);
   };
 
-  const prevLockedRef = useRef(locked);
-  useEffect(() => {
-    if (prevLockedRef.current && !locked) p.onHover(null);
-    prevLockedRef.current = locked;
-  }, [locked, p.onHover]);
-
   const visibleLinks = useMemo(
     () => data.links.filter(([a, b]) => view.visible.has(a) && view.visible.has(b) && idx.byId.has(a) && idx.byId.has(b)),
     [data.links, view.visible, idx.byId],
@@ -614,8 +604,6 @@ export function TreeView(p: Props) {
                         n={n}
                         on={!!focusSet?.has(n.id)}
                         selected={selected === n.id}
-                        locked={locked}
-                        onHover={p.onHover}
                         onSelect={p.onSelect}
                         register={register}
                         data={data}

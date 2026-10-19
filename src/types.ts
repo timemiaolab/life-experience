@@ -18,6 +18,14 @@ export interface Identity {
   city?: string;
 }
 
+/** 公开来源（整理稿，非本人投稿） */
+export interface ContributionSource {
+  url: string;
+  title: string;
+  publisher: string;
+  date: string;
+}
+
 /** 一次「讲一件事」的投稿 */
 export interface Contribution {
   id: string;
@@ -29,8 +37,13 @@ export interface Contribution {
   sceneIds: string[];
   /** 示例数据标记 */
   demo?: boolean;
-  /** 整理引擎：mock / llm / seed */
-  engine?: 'mock' | 'llm' | 'seed';
+  /** 整理引擎：mock / llm / seed / curated */
+  engine?: 'mock' | 'llm' | 'seed' | 'curated';
+  /** 公开姓名或常用网名（整理稿使用来源中的署名） */
+  name?: string;
+  /** 整理者署名，如「编辑部」 */
+  curatedBy?: string;
+  source?: ContributionSource;
 }
 
 export interface GNode {

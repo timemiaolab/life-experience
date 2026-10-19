@@ -22,7 +22,6 @@ export default function App() {
   const [filter, setFilter] = useState<Filter>(() => readFilterQuery());
   const [selected, setSelected] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
-  const [hovered, setHovered] = useState<string | null>(null);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [fresh] = useState<Set<string>>(() => new Set());
   const [flashLayer, setFlashLayer] = useState<{ k: Layer; t: number } | null>(null);
@@ -66,7 +65,7 @@ export default function App() {
   const filterOn = filterActive(filter);
 
   const sel = selected && view.visible.has(selected) ? selected : null;
-  const focusId = locked ? sel : (hovered || sel);
+  const focusId = locked ? sel : null;
   const focusSet = useMemo(() => {
     const up = (i: string) => (idx.ups.get(i) ?? []).filter((x) => view.visible.has(x));
     const dn = (i: string) => (idx.downs.get(i) ?? []).filter((x) => view.visible.has(x));
@@ -137,7 +136,7 @@ export default function App() {
           </div>
           <div className="tools">
             <span className="hint">
-              {locked ? '🔒 已锁定 · 点击其他卡片切换 · Esc/点空白解锁' : '悬停预览 · 点击锁定高亮'}
+              {locked ? '🔒 已锁定 · 点击其他卡片切换 · Esc/✕/点空白清除' : '点击卡片锁定高亮'}
             </span>
             <button type="button" className="btn mag" data-testid="open-submit" onClick={() => setSubmitOpen(true)}>＋ 讲一件事</button>
             <button type="button" className="btn ghost" onClick={exportJson} title="导出当前数据为 JSON">导出</button>
@@ -149,7 +148,7 @@ export default function App() {
         <div className="body">
           <TreeView
             data={data} idx={idx} view={view} order={order} focusSet={focusSet}
-            selected={sel} locked={locked} onSelect={handleSelect} onHover={setHovered} onCanvasClick={handleCanvasClick}
+            selected={sel} onSelect={handleSelect} onCanvasClick={handleCanvasClick}
             fresh={fresh} scrollTarget={scrollTarget} flashLayer={flashLayer} originFilter={filter.origin} filterOn={filterOn}
           />
           <DetailPanel node={node} data={data} idx={idx} view={view} filterOn={filterOn} onSelect={handleSelect} locked={locked}

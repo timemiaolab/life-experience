@@ -77,7 +77,9 @@ export function applyExtraction(
   const byId = () => new Map(nodes.map((n) => [n.id, n]));
   const hasLink = (a: string, b: string) => links.some((l) => l[0] === a && l[1] === b);
   const addLink = (a: string, b: string) => { if (!hasLink(a, b)) links.push([a, b]); };
-  const today = new Date().toISOString().slice(0, 10);
+  const today = (doc.sourceDate && /^\d{4}-\d{2}-\d{2}$/.test(doc.sourceDate))
+    ? doc.sourceDate
+    : new Date().toISOString().slice(0, 10);
   const { text: story } = anonymize(doc.story);
 
   const cid = nextId('c', graph.contributions.map((c) => c.id));
@@ -179,6 +181,7 @@ export function applyExtraction(
     }
   }
 
+  const curated = !!(doc.curatedBy || doc.sourceUrl);
   const contribution: Contribution = {
     id: cid,
     identity: {
@@ -191,8 +194,18 @@ export function applyExtraction(
     story,
     createdAt: today,
     sceneIds,
-    engine: 'llm',
+    engine: curated ? 'curated' : 'llm',
   };
+  if (doc.name) contribution.name = doc.name;
+  if (doc.curatedBy) contribution.curatedBy = doc.curatedBy;
+  if (doc.sourceUrl) {
+    contribution.source = {
+      url: doc.sourceUrl,
+      title: doc.sourceTitle || doc.title,
+      publisher: doc.sourcePublisher || '',
+      date: doc.sourceDate || today,
+    };
+  }
 
   const next: GraphFile = normalizeGraph({
     version: graph.version,

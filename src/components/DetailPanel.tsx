@@ -14,15 +14,34 @@ interface Props {
   onVote: (id: string) => void;
 }
 
+function engineBadge(c: Contribution): string {
+  if (c.demo) return 'DEMO';
+  if (c.engine === 'llm') return 'LLM';
+  if (c.engine === 'curated') return '整理';
+  if (c.engine === 'seed') return 'DEMO';
+  return 'USER';
+}
+
 function Story({ c, scenes, onSelect }: { c: Contribution; scenes: GNode[]; onSelect: (id: string) => void }) {
   const [open, setOpen] = useState(false);
+  const who = [c.name, identityText({ ...c.identity, origin: '' })].filter(Boolean).join(' · ');
   return (
     <div className="story">
       <div className="st-h">
         <span className="og" style={{ ['--oc' as string]: ORIGIN_COLORS[c.identity.origin] ?? '#00f0ff' }}>{c.identity.origin}</span>
-        <span className="st-id">{identityText({ ...c.identity, origin: '' })}</span>
-        <em>{c.demo ? 'DEMO' : c.engine === 'llm' ? 'LLM' : 'USER'} · {c.createdAt}</em>
+        <span className="st-id">{who}</span>
+        <em>{engineBadge(c)} · {c.createdAt}</em>
       </div>
+      {(c.curatedBy || c.source) && (
+        <div className="st-meta">
+          {c.curatedBy ? <span>整理：{c.curatedBy}</span> : null}
+          {c.source?.url ? (
+            <a className="src" href={c.source.url} target="_blank" rel="noopener noreferrer" data-testid="source-link">
+              来源{c.source.title ? ` · ${c.source.title}` : ''}
+            </a>
+          ) : null}
+        </div>
+      )}
       {scenes.map((s) => <div key={s.id} className="st-scene" onClick={() => onSelect(s.id)}>↳ {s.title}</div>)}
       <p className={open ? '' : 'clamp4'}>{c.story}</p>
       {c.story.length > 80 && <button type="button" className="lnk" onClick={() => setOpen(!open)}>{open ? '收起' : '展开原文'}</button>}
