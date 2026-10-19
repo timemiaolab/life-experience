@@ -85,9 +85,19 @@ jobs:
           echo "md=$MD_FILE" >> "$GITHUB_OUTPUT"
 
           SINCE=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
-          COUNT=$(gh api "repos/${REPO}/actions/workflows/ingest.yml/runs?created=>${SINCE}&per_page=1" --jq '.total_count')
-          echo "近 24 小时 ingest 运行次数：${COUNT}（上限 ${DAILY_CAP}）"
-          if [ "${COUNT:-0}" -gt "$DAILY_CAP" ] && [ "$HAS_AI_OK" != "true" ]; then
+          CURRENT="${GITHUB_RUN_ID:-0}"
+          COUNT=0
+          while IFS= read -r id; do
+            [ -z "$id" ] && continue
+            [ "$id" = "$CURRENT" ] && continue
+            HIT=$(gh api "repos/${REPO}/actions/runs/${id}/jobs" --jq '
+              [.jobs[].steps[]? | select(.name == "运行 ingest")
+                | select(.status == "in_progress" or .conclusion == "success" or .conclusion == "failure")]
+              | length')
+            if [ "${HIT:-0}" -gt 0 ]; then COUNT=$((COUNT + 1)); fi
+          done < <(gh api --paginate "repos/${REPO}/actions/workflows/ingest.yml/runs?created=>${SINCE}&per_page=100" --jq '.workflow_runs[].id')
+          echo "近 24 小时实际整理次数：${COUNT}（上限 ${DAILY_CAP}，不含跳过与当前运行）"
+          if [ "${COUNT:-0}" -ge "$DAILY_CAP" ] && [ "$HAS_AI_OK" != "true" ]; then
             echo "::error::今日整理次数已达上限（${DAILY_CAP}）。请仓库管理员给本 PR 打上标签 ai-ok 后再运行。"
             gh pr comment "$PR_NUMBER" --body "今日自动整理已达上限（${DAILY_CAP} 次/天）。请仓库管理员加上标签 \`ai-ok\` 后再触发。@$PR_AUTHOR"
             exit 1

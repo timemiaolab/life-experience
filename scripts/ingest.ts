@@ -12,7 +12,7 @@ import {
   EMBEDDINGS_PATH, GRAPH_PATH, ROOT, loadEmbeddings, loadGraph, saveEmbeddings, saveGraph, prettyGraph,
   type EmbeddingsFile,
 } from './lib/graph-io.ts';
-import { applyExtraction, formatNote, textForEmbed } from './lib/apply-ingest.ts';
+import { applyExtraction, formatNote, nearest, textForEmbed } from './lib/apply-ingest.ts';
 import { chatModel, embedDim, embedModel, extractWithLlm, geminiEmbed, cosine } from './lib/llm.ts';
 import { readExperience, type ExperienceDoc } from './lib/parse-experience.ts';
 import type { GNode } from '../src/types.ts';
@@ -103,20 +103,21 @@ async function main() {
         const newSceneVecs = await geminiEmbed(sceneTexts, geminiKey!);
         sceneVecs.push(...newSceneVecs);
         for (const p of llm.extraction.principles) {
-          if (p.action !== 'new') continue;
           const [vec] = await geminiEmbed([`${p.title} ${p.desc}`], geminiKey!);
-          let best = { id: '', title: '', s: 0 };
-          for (const n of graph.nodes.filter((x) => x.layer === 'principle')) {
-            const ev = embeddings.vectors[n.id];
-            if (!ev) continue;
-            const s = cosine(vec, ev);
-            if (s > best.s) best = { id: n.id, title: n.title, s };
+          if (p.action === 'merge' && p.existingId) {
+            const ev = embeddings.vectors[p.existingId];
+            if (ev) p.similarity = cosine(vec, ev);
+            continue;
           }
-          if (best.id && best.s >= MERGE_SIM) {
+          const near = nearest(vec, 'principle', graph, embeddings);
+          if (!near) continue;
+          p.similarity = near.similarity;
+          p.nearestId = near.id;
+          p.nearestTitle = near.title;
+          if (near.similarity >= MERGE_SIM) {
             p.action = 'merge';
-            p.existingId = best.id;
-            p.similarity = best.s;
-            console.log(`近重合并原则 → ${best.id}「${best.title}」相似度 ${(best.s * 100).toFixed(0)}%`);
+            p.existingId = near.id;
+            console.log(`近重合并原则 → ${near.id}「${near.title}」相似度 ${(near.similarity * 100).toFixed(0)}%`);
           }
         }
       } catch (e) {

@@ -168,7 +168,10 @@ export function applyExtraction(
       nodes.push({ id: pid, layer: 'principle', title: p.title, desc: p.desc, createdAt: today, keywords: [] });
       newNodeIds.push(pid);
       addLink(pid, ideaId);
-      notes.push({ kind: 'principle', action: 'new', id: pid, title: p.title, similarity: p.similarity });
+      notes.push({
+        kind: 'principle', action: 'new', id: pid, title: p.title,
+        similarity: p.similarity, nearestId: p.nearestId, existingTitle: p.nearestTitle,
+      });
     }
     for (const si of p.sceneIndexes) {
       const sid = sceneIds[si];
