@@ -163,7 +163,6 @@ export function TreeView(p: Props) {
 
   const zoomRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
-  const rafRef = useRef(0);
   const onCanvasClickRef = useRef(p.onCanvasClick);
   onCanvasClickRef.current = p.onCanvasClick;
   const geoRef = useRef(geo);
@@ -177,14 +176,6 @@ export function TreeView(p: Props) {
     el.style.transform = `translate(${x}px, ${y}px) scale(${z})`;
     if (zoomLevelRef.current) zoomLevelRef.current.textContent = `${Math.round(z * 100)}%`;
   }, []);
-
-  const schedulePaint = useCallback(() => {
-    if (rafRef.current) return;
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = 0;
-      paint();
-    });
-  }, [paint]);
 
   const persistZoom = () => {
     try { localStorage.setItem('tree-zoom', String(zoomRef.current)); } catch { /* ignore */ }
@@ -248,20 +239,16 @@ export function TreeView(p: Props) {
   const handleZoomReset = () => {
     const c = scrollRef.current;
     if (c) { c.scrollLeft = 0; c.scrollTop = 0; }
-    zoomRef.current = 1;
-    panRef.current = { x: 0, y: 0 };
+    applyPanZoom({ x: 0, y: 0 }, 1);
     persistZoom();
-    schedulePaint();
   };
   const handleZoomFit = () => {
     const container = scrollRef.current;
     const g = geoRef.current;
     if (!container || !g.w || !g.h) return;
     const scale = Math.min((container.clientWidth - 80) / g.w, (container.clientHeight - 80) / g.h, 1);
-    zoomRef.current = scale;
-    panRef.current = { x: 0, y: 0 };
+    applyPanZoom({ x: 0, y: 0 }, scale);
     persistZoom();
-    schedulePaint();
   };
 
   useEffect(() => {
@@ -430,7 +417,7 @@ export function TreeView(p: Props) {
 
   return (
     <div className="tree-area">
-      <div className="scroll" ref={scrollRef} onMouseDown={handleMouseDown}>
+      <div className="scroll" ref={scrollRef} onMouseDown={handleMouseDown} data-testid="tree-scroll">
         <div className={`inner${focusSet ? ' focus' : ''}`} ref={innerRef}>
           <LinkLayer geo={geo} focusSet={focusSet} fresh={fresh} />
           <div className="grid" ref={gridRef}>
@@ -473,10 +460,10 @@ export function TreeView(p: Props) {
         </div>
       </div>
       <div className="zoom-controls">
-        <button type="button" onClick={handleZoomIn} title="放大 (Ctrl/Cmd + Wheel)">+</button>
-        <button type="button" onClick={handleZoomOut} title="缩小">−</button>
-        <button type="button" onClick={handleZoomReset} title="重置">1:1</button>
-        <button type="button" onClick={handleZoomFit} title="适应屏幕">⊡</button>
+        <button type="button" data-testid="zoom-in" onClick={handleZoomIn} title="放大 (Ctrl/Cmd + Wheel)">+</button>
+        <button type="button" data-testid="zoom-out" onClick={handleZoomOut} title="缩小">−</button>
+        <button type="button" data-testid="zoom-reset" onClick={handleZoomReset} title="重置">1:1</button>
+        <button type="button" data-testid="zoom-fit" onClick={handleZoomFit} title="适应屏幕">⊡</button>
         <span className="zoom-level" ref={zoomLevelRef}>100%</span>
       </div>
     </div>

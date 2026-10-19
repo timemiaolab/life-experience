@@ -19,7 +19,67 @@ export interface GraphFile {
 export interface EmbeddingsFile {
   model: string;
   dim: number;
+  encoding?: 'f16le-b64' | 'json';
   vectors: Record<string, number[]>;
+}
+
+/** IEEE-754 binary16 (little-endian) helpers so embeddings.json stays one line per id. */
+function floatToF16(f: number): number {
+  const dv = new DataView(new ArrayBuffer(4));
+  dv.setFloat32(0, f);
+  const x = dv.getUint32(0);
+  const s = (x >>> 16) & 0x8000;
+  const e = ((x >>> 23) & 0xff) - 127 + 15;
+  const m = x & 0x7fffff;
+  if (e <= 0) {
+    if (e < -10) return s;
+    return s | ((m | 0x800000) >> (14 - e));
+  }
+  if (e === 0xff - 127 + 15) return s | 0x7c00 | (m ? 0x200 : 0);
+  if (e > 30) return s | 0x7c00;
+  return s | (e << 10) | (m >>> 13);
+}
+
+function f16ToFloat(h: number): number {
+  const s = (h & 0x8000) << 16;
+  let e = (h >> 10) & 0x1f;
+  let m = h & 0x3ff;
+  if (e === 0) {
+    if (m === 0) {
+      const dv = new DataView(new ArrayBuffer(4));
+      dv.setUint32(0, s);
+      return dv.getFloat32(0);
+    }
+    e = 1;
+    while ((m & 0x400) === 0) {
+      m <<= 1;
+      e--;
+    }
+    m &= 0x3ff;
+    e = e - 15 + 127;
+  } else if (e === 31) {
+    const dv = new DataView(new ArrayBuffer(4));
+    dv.setUint32(0, s | 0x7f800000 | (m << 13));
+    return dv.getFloat32(0);
+  } else {
+    e = e - 15 + 127;
+  }
+  const dv = new DataView(new ArrayBuffer(4));
+  dv.setUint32(0, s | (e << 23) | (m << 13));
+  return dv.getFloat32(0);
+}
+
+export function encodeVecF16(vec: number[]): string {
+  const buf = Buffer.alloc(vec.length * 2);
+  for (let i = 0; i < vec.length; i++) buf.writeUInt16LE(floatToF16(vec[i]), i * 2);
+  return buf.toString('base64');
+}
+
+export function decodeVecF16(b64: string): number[] {
+  const buf = Buffer.from(b64, 'base64');
+  const out: number[] = [];
+  for (let i = 0; i + 1 < buf.length; i += 2) out.push(f16ToFloat(buf.readUInt16LE(i)));
+  return out;
 }
 
 function sortIdentity(id: Identity): Identity {
@@ -109,16 +169,42 @@ export function nextId(prefix: string, existing: Iterable<string>): string {
 
 export function loadEmbeddings(path = EMBEDDINGS_PATH): EmbeddingsFile {
   try {
-    return JSON.parse(readFileSync(path, 'utf8')) as EmbeddingsFile;
+    const raw = JSON.parse(readFileSync(path, 'utf8')) as {
+      model?: string;
+      dim?: number;
+      encoding?: string;
+      vectors?: Record<string, unknown>;
+    };
+    const vectors: Record<string, number[]> = {};
+    for (const [id, v] of Object.entries(raw.vectors ?? {})) {
+      if (Array.isArray(v) && v.every((x) => typeof x === 'number')) vectors[id] = v as number[];
+      else if (typeof v === 'string') vectors[id] = decodeVecF16(v);
+    }
+    return {
+      model: raw.model || 'gemini-embedding-001',
+      dim: raw.dim || 768,
+      encoding: 'f16le-b64',
+      vectors,
+    };
   } catch {
-    return { model: 'text-embedding-004', dim: 768, vectors: {} };
+    return { model: 'gemini-embedding-001', dim: 768, encoding: 'f16le-b64', vectors: {} };
   }
 }
 
 export function saveEmbeddings(data: EmbeddingsFile, path = EMBEDDINGS_PATH): void {
   mkdirSync(dirname(path), { recursive: true });
   const keys = Object.keys(data.vectors).sort();
-  const vectors: Record<string, number[]> = {};
-  for (const k of keys) vectors[k] = data.vectors[k];
-  writeFileSync(path, `${JSON.stringify({ model: data.model, dim: data.dim, vectors }, null, 2)}\n`);
+  const lines = [
+    '{',
+    `  "model": ${JSON.stringify(data.model)},`,
+    `  "dim": ${data.dim},`,
+    '  "encoding": "f16le-b64",',
+    '  "vectors": {',
+  ];
+  keys.forEach((k, i) => {
+    const comma = i < keys.length - 1 ? ',' : '';
+    lines.push(`    ${JSON.stringify(k)}: ${JSON.stringify(encodeVecF16(data.vectors[k]))}${comma}`);
+  });
+  lines.push('  }', '}', '');
+  writeFileSync(path, lines.join('\n'));
 }

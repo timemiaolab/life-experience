@@ -6,14 +6,16 @@
  *   npx tsx scripts/ingest.ts --dry-run --mock-response mock.json experiences/foo.md
  *   npx tsx scripts/ingest.ts experiences/foo.md
  */
-import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import {
   EMBEDDINGS_PATH, GRAPH_PATH, ROOT, loadEmbeddings, loadGraph, saveEmbeddings, saveGraph, prettyGraph,
+  type EmbeddingsFile,
 } from './lib/graph-io.ts';
-import { applyExtraction, textForEmbed } from './lib/apply-ingest.ts';
-import { extractWithLlm, geminiEmbed, cosine } from './lib/llm.ts';
+import { applyExtraction, formatNote, textForEmbed } from './lib/apply-ingest.ts';
+import { chatModel, embedDim, embedModel, extractWithLlm, geminiEmbed, cosine } from './lib/llm.ts';
 import { readExperience, type ExperienceDoc } from './lib/parse-experience.ts';
+import type { GNode } from '../src/types.ts';
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -38,6 +40,20 @@ function collectFiles(): string[] {
     .map((f) => join(dir, f));
 }
 
+const EMBED_LAYERS = new Set<GNode['layer']>(['principle', 'idea', 'meaning', 'scene']);
+
+async function embedMissing(
+  graphNodes: GNode[],
+  embeddings: EmbeddingsFile,
+  key: string,
+): Promise<void> {
+  const missing = graphNodes.filter((n) => EMBED_LAYERS.has(n.layer) && !embeddings.vectors[n.id]);
+  if (!missing.length) return;
+  console.log(`补齐 ${missing.length} 个已有节点的 embedding（${embedModel()} dim=${embedDim()}）`);
+  const vecs = await geminiEmbed(missing.map(textForEmbed), key);
+  missing.forEach((n, i) => { embeddings.vectors[n.id] = vecs[i]; });
+}
+
 async function main() {
   const dry = has('--dry-run');
   const mockPath = arg('--mock-response');
@@ -53,10 +69,19 @@ async function main() {
     console.error('缺少环境变量 GEMINI_API_KEY 与 SILICONFLOW_API_KEY。请仓库管理员在 GitHub Secrets 中配置后再运行。');
     process.exit(1);
   }
+  if (!mockPath && !geminiKey) {
+    console.error('缺少 GEMINI_API_KEY：嵌入模型无法调用，拒绝静默跳过近重判断。请配置 Secrets / 环境变量后再运行。');
+    process.exit(1);
+  }
+
+  console.log(`对话模型默认 ${chatModel()}；嵌入模型 ${embedModel()}（outputDimensionality=${embedDim()}）`);
 
   let graph = loadGraph();
   let embeddings = loadEmbeddings();
+  embeddings.model = embedModel();
+  embeddings.dim = embedDim();
   const summaries: string[] = [];
+  const MERGE_SIM = 0.82;
 
   for (const file of files) {
     const parsed = readExperience(file);
@@ -68,47 +93,71 @@ async function main() {
     const mockJson = mockPath ? JSON.parse(readFileSync(mockPath, 'utf8')) : undefined;
     const llm = await extractWithLlm(doc.story, graph, { mockJson, geminiKey, siliconKey });
 
-    const MERGE_SIM = 0.82;
-    if (geminiKey && !mockPath) {
+    const sceneVecs: (number[] | undefined)[] = [];
+    if (mockPath) {
+      console.log('mock 模式：跳过 embedding / 近重判断（不调用模型）。');
+    } else {
       try {
-        const missing = graph.nodes.filter((n) => n.layer === 'principle' || n.layer === 'idea' || n.layer === 'meaning' || n.layer === 'scene')
-          .filter((n) => !embeddings.vectors[n.id]);
-        if (missing.length) {
-          const vecs = await geminiEmbed(missing.map(textForEmbed), geminiKey);
-          missing.forEach((n, i) => { embeddings.vectors[n.id] = vecs[i]; });
-        }
+        await embedMissing(graph.nodes, embeddings, geminiKey!);
+        const sceneTexts = llm.extraction.scenes.map((s) => `${s.title} ${s.desc}`);
+        const newSceneVecs = await geminiEmbed(sceneTexts, geminiKey!);
+        sceneVecs.push(...newSceneVecs);
         for (const p of llm.extraction.principles) {
           if (p.action !== 'new') continue;
-          const [vec] = await geminiEmbed([`${p.title} ${p.desc}`], geminiKey);
-          let best = { id: '', s: 0 };
+          const [vec] = await geminiEmbed([`${p.title} ${p.desc}`], geminiKey!);
+          let best = { id: '', title: '', s: 0 };
           for (const n of graph.nodes.filter((x) => x.layer === 'principle')) {
             const ev = embeddings.vectors[n.id];
             if (!ev) continue;
             const s = cosine(vec, ev);
-            if (s > best.s) best = { id: n.id, s };
+            if (s > best.s) best = { id: n.id, title: n.title, s };
           }
           if (best.id && best.s >= MERGE_SIM) {
             p.action = 'merge';
             p.existingId = best.id;
+            p.similarity = best.s;
+            console.log(`近重合并原则 → ${best.id}「${best.title}」相似度 ${(best.s * 100).toFixed(0)}%`);
           }
         }
       } catch (e) {
-        console.warn('embedding / 近重判断跳过：', e instanceof Error ? e.message : e);
+        const why = e instanceof Error ? e.message : String(e);
+        console.error(`FALLBACK 嵌入失败：模型 ${embedModel()} dim=${embedDim()}。原因：${why}`);
+        console.error('拒绝静默跳过近重判断；本轮整理中止。');
+        process.exit(1);
       }
     }
 
-    const applied = applyExtraction(graph, doc, llm.extraction, embeddings, []);
+    const applied = applyExtraction(graph, doc, llm.extraction, embeddings, sceneVecs);
     graph = applied.graph;
+
+    if (!mockPath && applied.newNodeIds.length) {
+      try {
+        const created = applied.newNodeIds
+          .map((id) => graph.nodes.find((n) => n.id === id))
+          .filter((n): n is GNode => !!n);
+        if (created.length) {
+          console.log(`为本轮新建的 ${created.length} 个节点写入 embedding`);
+          const vecs = await geminiEmbed(created.map(textForEmbed), geminiKey!);
+          created.forEach((n, i) => { embeddings.vectors[n.id] = vecs[i]; });
+        }
+      } catch (e) {
+        const why = e instanceof Error ? e.message : String(e);
+        console.error(`新建节点 embedding 失败（${embedModel()}）：${why}`);
+        console.error('拒绝在没有向量的情况下写入图谱。');
+        process.exit(1);
+      }
+    }
+
+    const fallbackLines = llm.fallbacks.length
+      ? llm.fallbacks.map((f) => `回退：${f}`)
+      : [];
     summaries.push([
       `文件：${doc.file}`,
       `贡献者：${doc.origin} · ${doc.profession} · ${doc.region} · ${doc.age}${doc.city ? ` · ${doc.city}` : ''}（${applied.contributionId}）`,
-      `模型：${llm.provider}`,
+      `模型：${llm.provider} / ${llm.chatModel}`,
+      ...fallbackLines,
       `场景：${llm.extraction.scenes.map((s) => s.title).join('；')}`,
-      ...applied.notes.map((n) => {
-        const sim = n.similarity != null ? `，相似度 ${(n.similarity * 100).toFixed(0)}%` : '';
-        const near = n.nearestId ? ` ← ${n.nearestId}` : '';
-        return n.action === 'merge' ? `合并${n.kind} ${n.id}「${n.title}」${near}${sim}` : `新建${n.kind} ${n.id}「${n.title}」${near}${sim}`;
-      }),
+      ...applied.notes.map(formatNote),
     ].join('\n'));
   }
 

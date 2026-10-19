@@ -1,14 +1,28 @@
 import { EXTRACT_JSON_INSTRUCTIONS, type IngestExtraction, validateExtraction } from './schema.ts';
 import type { GraphFile } from './graph-io.ts';
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
-const QWEN_MODEL = 'Qwen/Qwen2.5-7B-Instruct';
-const SILICONFLOW_URL = 'https://api.siliconflow.com/v1/chat/completions';
+export function chatModel(): string {
+  return process.env.GEMINI_CHAT_MODEL?.trim() || 'gemini-flash-latest';
+}
+export function embedModel(): string {
+  return process.env.GEMINI_EMBED_MODEL?.trim() || 'gemini-embedding-001';
+}
+export function embedDim(): number {
+  const n = Number(process.env.GEMINI_EMBED_DIM || '768');
+  return Number.isFinite(n) && n > 0 ? n : 768;
+}
+export function siliconflowModel(): string {
+  return process.env.SILICONFLOW_MODEL?.trim() || 'Qwen/Qwen2.5-7B-Instruct';
+}
+
+const SILICONFLOW_URL = process.env.SILICONFLOW_URL?.trim() || 'https://api.siliconflow.com/v1/chat/completions';
 
 export interface LlmCallResult {
   extraction: IngestExtraction;
   provider: 'gemini' | 'siliconflow' | 'mock';
   raw: string;
+  fallbacks: string[];
+  chatModel: string;
 }
 
 function extractJson(text: string): unknown {
@@ -39,8 +53,8 @@ ${story}
 </STORY>`;
 }
 
-async function geminiGenerate(prompt: string, key: string): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
+async function geminiGenerate(prompt: string, key: string, model: string): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -49,19 +63,19 @@ async function geminiGenerate(prompt: string, key: string): Promise<string> {
       generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
     }),
   });
-  if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  if (!res.ok) throw new Error(`Gemini HTTP ${res.status}（模型 ${model}）：${(await res.text()).slice(0, 300)}`);
   const json = await res.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
   const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
-  if (!text) throw new Error('Gemini 返回空文本');
+  if (!text) throw new Error(`Gemini 返回空文本（模型 ${model}）`);
   return text;
 }
 
-async function siliconflowGenerate(prompt: string, key: string): Promise<string> {
+async function siliconflowGenerate(prompt: string, key: string, model: string): Promise<string> {
   const res = await fetch(SILICONFLOW_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      model: QWEN_MODEL,
+      model,
       temperature: 0.2,
       messages: [
         { role: 'system', content: '只输出合法 JSON。' },
@@ -69,10 +83,11 @@ async function siliconflowGenerate(prompt: string, key: string): Promise<string>
       ],
     }),
   });
-  if (!res.ok) throw new Error(`SiliconFlow HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  const json = await res.json() as { choices?: { message?: { content?: string } }[] };
-  const text = json.choices?.[0]?.message?.content ?? '';
-  if (!text) throw new Error('SiliconFlow 返回空文本');
+  if (!res.ok) throw new Error(`SiliconFlow HTTP ${res.status}（模型 ${model}）：${(await res.text()).slice(0, 300)}`);
+  const json = await res.json() as { choices?: { message?: { content?: string }[] } | { choices?: { message?: { content?: string } }[] } };
+  const choices = (json as { choices?: { message?: { content?: string } }[] }).choices;
+  const text = choices?.[0]?.message?.content ?? '';
+  if (!text) throw new Error(`SiliconFlow 返回空文本（模型 ${model}）`);
   return text;
 }
 
@@ -81,29 +96,36 @@ export async function extractWithLlm(
   graph: GraphFile,
   opts: { mockJson?: unknown; geminiKey?: string; siliconKey?: string },
 ): Promise<LlmCallResult> {
+  const fallbacks: string[] = [];
+  const gm = chatModel();
+  const sm = siliconflowModel();
   if (opts.mockJson !== undefined) {
     const v = validateExtraction(opts.mockJson, graph);
     if (!v.ok) throw new Error(`mock JSON 未通过校验：${v.error}`);
-    return { extraction: v.value, provider: 'mock', raw: JSON.stringify(opts.mockJson) };
+    return { extraction: v.value, provider: 'mock', raw: JSON.stringify(opts.mockJson), fallbacks, chatModel: 'mock' };
   }
   const prompt = buildPrompt(story, graph);
   const errors: string[] = [];
   if (opts.geminiKey) {
     try {
-      const raw = await geminiGenerate(prompt, opts.geminiKey);
+      const raw = await geminiGenerate(prompt, opts.geminiKey, gm);
       const v = validateExtraction(extractJson(raw), graph);
       if (!v.ok) throw new Error(v.error);
-      return { extraction: v.value, provider: 'gemini', raw };
+      return { extraction: v.value, provider: 'gemini', raw, fallbacks, chatModel: gm };
     } catch (e) {
-      errors.push(`Gemini: ${e instanceof Error ? e.message : String(e)}`);
+      const why = e instanceof Error ? e.message : String(e);
+      errors.push(`Gemini: ${why}`);
+      fallbacks.push(`对话模型 ${gm} 失败（${why}），改用 SiliconFlow ${sm}。`);
+      console.warn(`FALLBACK 对话：${fallbacks.at(-1)}`);
     }
   }
   if (opts.siliconKey) {
     try {
-      const raw = await siliconflowGenerate(prompt, opts.siliconKey);
+      const raw = await siliconflowGenerate(prompt, opts.siliconKey, sm);
       const v = validateExtraction(extractJson(raw), graph);
       if (!v.ok) throw new Error(v.error);
-      return { extraction: v.value, provider: 'siliconflow', raw };
+      if (!opts.geminiKey) fallbacks.push(`未配置 GEMINI_API_KEY，对话直接使用 SiliconFlow ${sm}。`);
+      return { extraction: v.value, provider: 'siliconflow', raw, fallbacks, chatModel: sm };
     } catch (e) {
       errors.push(`SiliconFlow: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -112,18 +134,26 @@ export async function extractWithLlm(
 }
 
 export async function geminiEmbed(texts: string[], key: string): Promise<number[][]> {
+  const model = embedModel();
+  const dim = embedDim();
   const out: number[][] = [];
   for (const text of texts) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${encodeURIComponent(key)}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:embedContent?key=${encodeURIComponent(key)}`;
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'models/text-embedding-004', content: { parts: [{ text }] } }),
+      body: JSON.stringify({
+        model: `models/${model}`,
+        content: { parts: [{ text }] },
+        outputDimensionality: dim,
+      }),
     });
-    if (!res.ok) throw new Error(`embedding HTTP ${res.status}`);
+    if (!res.ok) {
+      throw new Error(`embedding HTTP ${res.status}（模型 ${model}, dim ${dim}）：${(await res.text()).slice(0, 300)}`);
+    }
     const json = await res.json() as { embedding?: { values?: number[] } };
     const values = json.embedding?.values;
-    if (!values?.length) throw new Error('embedding 为空');
+    if (!values?.length) throw new Error(`embedding 为空（模型 ${model}）`);
     out.push(values);
   }
   return out;

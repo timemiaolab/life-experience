@@ -2,129 +2,276 @@ name: Ingest experience
 
 # 只检出 base 分支代码；投稿 Markdown 当纯数据经 API 读取，绝不执行 PR 代码。
 # fork PR 拿不到 secrets 的 pull_request 事件，所以用 pull_request_target。
+# 所有来自 PR 的字符串只进 env:，run: 里只用引号包裹的 "$VAR"（防脚本注入）。
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened]
-    paths:
-      - 'experiences/**'
+    types: [opened, synchronize, reopened, labeled]
+
+concurrency:
+  group: ingest-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   ingest:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+      PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+      PR_AUTHOR_ID: ${{ github.event.pull_request.user.id }}
+      EVENT_ACTION: ${{ github.event.action }}
+      LABEL_NAME: ${{ github.event.label.name }}
+      HAS_AI_OK: ${{ contains(github.event.pull_request.labels.*.name, 'ai-ok') }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      SILICONFLOW_API_KEY: ${{ secrets.SILICONFLOW_API_KEY }}
+      GEMINI_CHAT_MODEL: ${{ vars.GEMINI_CHAT_MODEL }}
+      GEMINI_EMBED_MODEL: ${{ vars.GEMINI_EMBED_MODEL }}
+      GEMINI_EMBED_DIM: ${{ vars.GEMINI_EMBED_DIM }}
+      SILICONFLOW_MODEL: ${{ vars.SILICONFLOW_MODEL }}
+      DAILY_CAP: '20'
     steps:
+      - name: 预检（恰好一篇投稿、日配额、标签）
+        id: gate
+        run: |
+          set -euo pipefail
+          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "::error::非法 PR 编号"
+            exit 1
+          fi
+          if ! [[ "$HEAD_REF" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::非法 head.ref"
+            exit 1
+          fi
+          if ! [[ "$BASE_REF" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::非法 base.ref"
+            exit 1
+          fi
+          if ! [[ "$HEAD_REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::非法 head 仓库名"
+            exit 1
+          fi
+          if [ "$EVENT_ACTION" = "labeled" ] && [ "$LABEL_NAME" != "ai-ok" ]; then
+            echo "忽略非 ai-ok 标签。"
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          FILES=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/files" --paginate --jq '.[].filename')
+          echo "$FILES" > /tmp/pr-files.txt
+          echo "PR 变更文件："
+          echo "$FILES"
+
+          MD=$(echo "$FILES" | grep -E '^experiences/[^/]+\.md$' | grep -v '/TEMPLATE.md$' || true)
+          OTHER=$(echo "$FILES" | grep -v -E '^experiences/[^/]+\.md$' || true)
+          MD_COUNT=$(echo "$MD" | grep -c . || true)
+          if [ -n "$OTHER" ] || [ "$MD_COUNT" -ne 1 ]; then
+            echo "不是「恰好一篇 experiences/*.md」的投稿 PR，跳过整理。"
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          MD_FILE=$(echo "$MD" | head -n 1)
+          echo "md=$MD_FILE" >> "$GITHUB_OUTPUT"
+
+          SINCE=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          COUNT=$(gh api "repos/${REPO}/actions/workflows/ingest.yml/runs?created=>${SINCE}&per_page=1" --jq '.total_count')
+          echo "近 24 小时 ingest 运行次数：${COUNT}（上限 ${DAILY_CAP}）"
+          if [ "${COUNT:-0}" -gt "$DAILY_CAP" ] && [ "$HAS_AI_OK" != "true" ]; then
+            echo "::error::今日整理次数已达上限（${DAILY_CAP}）。请仓库管理员给本 PR 打上标签 ai-ok 后再运行。"
+            gh pr comment "$PR_NUMBER" --body "今日自动整理已达上限（${DAILY_CAP} 次/天）。请仓库管理员加上标签 \`ai-ok\` 后再触发。@$PR_AUTHOR"
+            exit 1
+          fi
+          if [ "$HAS_AI_OK" = "true" ]; then
+            echo "已有 ai-ok 标签，跳过日配额限制。"
+          fi
+
       - name: Checkout base 分支（可信代码）
+        if: steps.gate.outputs.skip != '1'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.sha }}
 
       - uses: actions/setup-node@v4
+        if: steps.gate.outputs.skip != '1'
         with:
           node-version: '20'
           cache: npm
 
       - run: npm ci
+        if: steps.gate.outputs.skip != '1'
 
       - name: 检查 API 密钥
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          SILICONFLOW_API_KEY: ${{ secrets.SILICONFLOW_API_KEY }}
+        if: steps.gate.outputs.skip != '1'
         run: |
+          set -euo pipefail
           if [ -z "$GEMINI_API_KEY" ] && [ -z "$SILICONFLOW_API_KEY" ]; then
             echo "::error::缺少 GitHub Secrets：GEMINI_API_KEY 与 SILICONFLOW_API_KEY。请仓库管理员在 Settings → Secrets and variables → Actions 中添加后再运行整理。"
             exit 1
           fi
-          if [ -z "$GEMINI_API_KEY" ]; then echo "::warning::未配置 GEMINI_API_KEY，将仅使用 SiliconFlow 备用。"; fi
-          if [ -z "$SILICONFLOW_API_KEY" ]; then echo "::warning::未配置 SILICONFLOW_API_KEY，将仅使用 Gemini。"; fi
-
-      - name: 读取 PR 中的 Markdown（纯数据）
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p /tmp/pr-experiences
-          FILES=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --jq '.[].filename')
-          echo "$FILES" > /tmp/pr-files.txt
-          if echo "$FILES" | grep -v '^experiences/.*\.md$' | grep -q .; then
-            echo "非投稿文件变更，跳过整理。"
-            echo "skip=1" >> "$GITHUB_ENV"
-            exit 0
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::缺少 GEMINI_API_KEY：嵌入无法运行，拒绝静默跳过近重判断。"
+            exit 1
           fi
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          echo "$FILES" | while read -r f; do
-            [ -z "$f" ] && continue
-            base=$(basename "$f")
-            [ "$base" = "TEMPLATE.md" ] && continue
-            gh api "repos/${{ github.repository }}/contents/${f}?ref=${HEAD_SHA}" --jq .content | base64 -d > "/tmp/pr-experiences/${base}"
-            echo "fetched $base"
-          done
-          ls /tmp/pr-experiences
+          if [ -z "$SILICONFLOW_API_KEY" ]; then echo "::warning::未配置 SILICONFLOW_API_KEY，对话失败时没有备用。"; fi
+          echo "对话模型：${GEMINI_CHAT_MODEL:-gemini-flash-latest}；嵌入：${GEMINI_EMBED_MODEL:-gemini-embedding-001} dim=${GEMINI_EMBED_DIM:-768}"
+
+      - name: 读取并校验投稿 Markdown（纯数据）
+        if: steps.gate.outputs.skip != '1'
+        id: fetchmd
+        env:
+          MD_FILE: ${{ steps.gate.outputs.md }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pr-experiences
+          base=$(basename "$MD_FILE")
+          if [ "$base" = "TEMPLATE.md" ]; then
+            echo "::error::请不要修改 TEMPLATE.md"
+            exit 1
+          fi
+          gh api "repos/${HEAD_REPO}/contents/${MD_FILE}?ref=${HEAD_SHA}" --jq .content | base64 -d > "/tmp/pr-experiences/${base}"
+          echo "fetched $base"
+          npx tsx scripts/validate-experience.ts "/tmp/pr-experiences/${base}"
+          echo "md_base=${base}" >> "$GITHUB_OUTPUT"
 
       - name: 运行 ingest
-        if: env.skip != '1'
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          SILICONFLOW_API_KEY: ${{ secrets.SILICONFLOW_API_KEY }}
+        if: steps.gate.outputs.skip != '1'
+        id: run
         run: |
+          set -euo pipefail
           shopt -s nullglob
           files=(/tmp/pr-experiences/*.md)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "没有新的投稿 md，跳过。"
-            echo "skip=1" >> "$GITHUB_ENV"
-            exit 0
+          if [ ${#files[@]} -ne 1 ]; then
+            echo "::error::内部错误：期望恰好一篇 md"
+            exit 1
           fi
-          npx tsx scripts/ingest.ts "${files[@]}" | tee /tmp/ingest-summary.txt
+          npx tsx scripts/ingest.ts "${files[0]}" | tee /tmp/ingest-summary.txt
+
+      - name: 对本轮图谱做 typecheck / build
+        if: steps.gate.outputs.skip != '1'
+        id: ci
+        run: |
+          set -euo pipefail
+          set +e
+          npm run typecheck > /tmp/typecheck.txt 2>&1
+          TC=$?
+          VITE_BASE_PATH=/life-experience/ npm run build > /tmp/build.txt 2>&1
+          BD=$?
+          set -e
+          {
+            echo ""
+            echo "—— 收录结果自检（GITHUB_TOKEN 开的 PR 不会触发 CI，所以在本任务里跑）——"
+            if [ "$TC" -eq 0 ]; then echo "typecheck：通过"; else echo "typecheck：失败"; tail -n 40 /tmp/typecheck.txt; fi
+            if [ "$BD" -eq 0 ]; then echo "build：通过"; else echo "build：失败"; tail -n 40 /tmp/build.txt; fi
+          } | tee -a /tmp/ingest-summary.txt
+          if [ "$TC" -ne 0 ] || [ "$BD" -ne 0 ]; then
+            echo "::error::整理结果未通过 typecheck/build，中止推送。"
+            exit 1
+          fi
+          echo "ci=pass" >> "$GITHUB_OUTPUT"
 
       - name: 提交整理结果
-        if: env.skip != '1'
+        if: steps.gate.outputs.skip != '1'
+        id: push
         env:
-          GH_TOKEN: ${{ github.token }}
+          MD_BASE: ${{ steps.fetchmd.outputs.md_base }}
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          PR_NUM="${{ github.event.pull_request.number }}"
-          HEAD_REPO="${{ github.event.pull_request.head.repo.full_name }}"
-          HEAD_REF="${{ github.event.pull_request.head.ref }}"
-          SAME_REPO="${{ github.event.pull_request.head.repo.full_name == github.repository }}"
+          AUTHOR="${PR_AUTHOR:-user}"
+          AUTHOR_ID="${PR_AUTHOR_ID:-0}"
+          TRAILER="Co-authored-by: ${AUTHOR} <${AUTHOR_ID}+${AUTHOR}@users.noreply.github.com>"
+          MSG="$(printf 'ingest: PR #%s 整理进静态图谱\n\n%s\n' "$PR_NUMBER" "$TRAILER")"
+
           mkdir -p experiences
           cp -n /tmp/pr-experiences/*.md experiences/ 2>/dev/null || true
           git add data/graph.json data/embeddings.json experiences/*.md
-          git diff --cached --quiet && echo "no changes" && exit 0
-          git commit -m "ingest: PR #${PR_NUM} 整理进静态图谱"
+          if git diff --cached --quiet; then
+            echo "图谱没有变更。"
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "$MSG"
+          INGEST_SHA=$(git rev-parse HEAD)
+          mkdir -p /tmp/ingest-out
+          cp data/graph.json /tmp/ingest-out/graph.json
+          cp data/embeddings.json /tmp/ingest-out/embeddings.json
+
+          regen_on_latest_base() {
+            echo "基于最新 base 重新整理（不丢弃结果、不留下半成品 cherry-pick）。"
+            git cherry-pick --abort 2>/dev/null || true
+            git reset --hard
+            git fetch origin "$BASE_REF"
+            git checkout -B ingest-regen "origin/${BASE_REF}"
+            mkdir -p experiences
+            cp /tmp/pr-experiences/*.md experiences/
+            if [ -z "$MD_BASE" ]; then echo "::error::缺少 MD_BASE"; exit 1; fi
+            npx tsx scripts/ingest.ts experiences/"$MD_BASE" | tee /tmp/ingest-summary.txt
+            git add data/graph.json data/embeddings.json experiences/*.md
+            git diff --cached --quiet || git commit -m "$MSG"
+            cp data/graph.json /tmp/ingest-out/graph.json
+            cp data/embeddings.json /tmp/ingest-out/embeddings.json
+            npm run typecheck
+            VITE_BASE_PATH=/life-experience/ npm run build
+          }
+
           if [ "$SAME_REPO" = "true" ]; then
-            git fetch origin "$HEAD_REF"
-            git checkout -B "pr-head" "origin/${HEAD_REF}"
-            git cherry-pick --keep-redundant-commits HEAD@{1} || {
-              git checkout "${{ github.event.pull_request.base.sha }}" -- data/graph.json data/embeddings.json
+            git fetch origin "$HEAD_REF" "$BASE_REF"
+            git checkout -B pr-head "origin/${HEAD_REF}"
+            if git cherry-pick --keep-redundant-commits "$INGEST_SHA"; then
+              echo "cherry-pick 成功"
+            else
+              regen_on_latest_base
+              git fetch origin "$HEAD_REF"
+              git checkout -B pr-head "origin/${HEAD_REF}"
+              mkdir -p experiences
+              cp /tmp/pr-experiences/*.md experiences/
+              cp /tmp/ingest-out/graph.json data/graph.json
+              cp /tmp/ingest-out/embeddings.json data/embeddings.json
               git add data/graph.json data/embeddings.json experiences/*.md
-              git commit -m "ingest: PR #${PR_NUM} 整理进静态图谱" || true
-            }
+              git diff --cached --quiet || git commit -m "$MSG"
+            fi
             git push origin "HEAD:${HEAD_REF}"
-            echo "mode=same" >> "$GITHUB_ENV"
+            echo "mode=same" >> "$GITHUB_OUTPUT"
+            BRANCH="$HEAD_REF"
           else
-            BRANCH="ingest/pr-${PR_NUM}"
+            BRANCH="ingest/pr-${PR_NUMBER}"
             git checkout -B "$BRANCH"
             git push -u origin "$BRANCH" --force
-            EXISTING=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number')
+            EXISTING=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number // empty')
             if [ -z "$EXISTING" ]; then
-              gh pr create --head "$BRANCH" --base "${{ github.event.pull_request.base.ref }}" \
-                --title "收录投稿：PR #${PR_NUM}" \
-                --body "由 #${PR_NUM} 的 Markdown 自动整理。站长审核合并这一条即可上线（原投稿 PR 无需再合）。"
+              gh pr create --head "$BRANCH" --base "$BASE_REF" \
+                --title "收录投稿：PR #${PR_NUMBER}" \
+                --body "$(printf '由 #%s（@%s）的 Markdown 自动整理。站长审核合并这一条即可上线（原投稿 PR 无需再合）。\n\n%s\n' "$PR_NUMBER" "$AUTHOR" "$TRAILER")"
             fi
-            echo "mode=companion" >> "$GITHUB_ENV"
+            echo "mode=companion" >> "$GITHUB_OUTPUT"
           fi
 
+          gh workflow run ci.yml --ref "$BRANCH" || echo "::warning::无法触发 workflow_dispatch CI（请确认 Actions 权限）。"
+
       - name: 在投稿 PR 上留言
-        if: env.skip != '1'
+        if: steps.gate.outputs.skip != '1'
         env:
-          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ steps.push.outputs.mode }}
         run: |
+          set -euo pipefail
           BODY=$(cat /tmp/ingest-summary.txt 2>/dev/null || echo "整理完成。")
-          if [ "${{ env.mode }}" = "companion" ]; then
+          if [ "$MODE" = "companion" ]; then
             NOTE="已生成收录 PR（fork 投稿）。请站长只审核合并收录 PR；本 PR 可关闭。"
+          elif [ "$MODE" = "none" ]; then
+            NOTE="整理完成，图谱无新变更。"
           else
             NOTE="整理结果已推送到本分支。站长审核合并这一条 PR 即可。"
           fi
-          gh pr comment ${{ github.event.pull_request.number }} --body "$(printf '%s\n\n\`\`\`\n%s\n\`\`\`\n' "$NOTE" "$BODY")"
+          gh pr comment "$PR_NUMBER" --body "$(printf '%s\n\n@%s\n\n```\n%s\n```\n' "$NOTE" "$PR_AUTHOR" "$BODY")"

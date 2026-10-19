@@ -32,25 +32,40 @@ export function clampPan(pan: { x: number; y: number }, box: PanBox): { x: numbe
   return { x, y };
 }
 
-const MIN_CARD = 24;
+export interface ScreenRect { left: number; top: number; right: number; bottom: number }
 
-export function cardOverlapsView(
-  card: { left: number; top: number; right: number; bottom: number },
-  view: { left: number; top: number; right: number; bottom: number },
-  min = MIN_CARD,
-): boolean {
+function overlap(card: ScreenRect, view: ScreenRect): { ox: number; oy: number; w: number; h: number } {
   const ox = Math.max(0, Math.min(view.right, card.right) - Math.max(view.left, card.left));
   const oy = Math.max(0, Math.min(view.bottom, card.bottom) - Math.max(view.top, card.top));
+  return { ox, oy, w: card.right - card.left, h: card.bottom - card.top };
+}
+
+function needX(cardW: number, view: ScreenRect): number {
+  return Math.min(40, Math.max(8, cardW), view.right - view.left);
+}
+
+function needY(cardH: number, view: ScreenRect): number {
+  return Math.min(Math.max(cardH, 1), view.bottom - view.top);
+}
+
+/** True when a full card-height (and a usable width) sits in the viewport. */
+export function cardHasFullHeightInView(card: ScreenRect, view: ScreenRect): boolean {
+  const { ox, oy, w, h } = overlap(card, view);
+  return ox >= needX(w, view) - 0.5 && oy >= needY(h, view) - 0.5;
+}
+
+export function cardOverlapsView(card: ScreenRect, view: ScreenRect, min = 24): boolean {
+  const { ox, oy } = overlap(card, view);
   return ox >= min && oy >= min;
 }
 
-/** Screen-space nudge so at least one card overlaps the viewport. pan deltas = pixel deltas. */
+/** Screen-space nudge so at least one full card height remains visible. */
 export function nudgePanForCards(
   pan: { x: number; y: number },
-  view: { left: number; top: number; right: number; bottom: number },
-  cards: { left: number; top: number; right: number; bottom: number }[],
+  view: ScreenRect,
+  cards: ScreenRect[],
 ): { x: number; y: number } {
-  if (!cards.length || cards.some((c) => cardOverlapsView(c, view))) return pan;
+  if (!cards.length || cards.some((c) => cardHasFullHeightInView(c, view))) return pan;
   const cx = (view.left + view.right) / 2;
   const cy = (view.top + view.bottom) / 2;
   let best = cards[0];
@@ -64,11 +79,15 @@ export function nudgePanForCards(
       best = c;
     }
   }
+  const w = best.right - best.left;
+  const h = best.bottom - best.top;
+  const nx = needX(w, view);
+  const ny = needY(h, view);
   let dx = 0;
   let dy = 0;
-  if (best.right < view.left + MIN_CARD) dx = view.left + MIN_CARD - best.right;
-  else if (best.left > view.right - MIN_CARD) dx = view.right - MIN_CARD - best.left;
-  if (best.bottom < view.top + MIN_CARD) dy = view.top + MIN_CARD - best.bottom;
-  else if (best.top > view.bottom - MIN_CARD) dy = view.bottom - MIN_CARD - best.top;
+  if (best.right < view.left + nx) dx = view.left + nx - best.right;
+  else if (best.left > view.right - nx) dx = view.right - nx - best.left;
+  if (best.bottom < view.top + ny) dy = view.top + ny - best.bottom;
+  else if (best.top > view.bottom - ny) dy = view.bottom - ny - best.top;
   return { x: pan.x + dx, y: pan.y + dy };
 }

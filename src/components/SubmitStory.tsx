@@ -1,7 +1,17 @@
 import { useEffect } from 'react';
 
 const CONTRIB_URL = 'https://github.com/timemiaolab/life-experience/blob/main/CONTRIBUTING.md#%E6%8A%95%E7%A8%BF%E4%B8%80%E7%AF%87%E7%BB%8F%E5%8E%86';
-const TEMPLATE_URL = 'https://github.com/timemiaolab/life-experience/new/main/experiences?filename=YYYY-MM-DD-bian-ti.md';
+
+function githubNewFileUrl(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const bytes = new Uint8Array(3);
+  crypto.getRandomValues(bytes);
+  const slug = Array.from(bytes, (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 6);
+  return `https://github.com/timemiaolab/life-experience/new/main/experiences?filename=${y}-${m}-${day}-${slug}.md`;
+}
 
 interface Props {
   open: boolean;
@@ -32,7 +42,7 @@ export default function SubmitStory({ open, onClose }: Props) {
         </ol>
         <p className="desc">请只提交经历文本，不要提交代码。</p>
         <div className="acts">
-          <a className="btn mag" href={TEMPLATE_URL} target="_blank" rel="noreferrer">在 GitHub 写一篇</a>
+          <a className="btn mag" href={githubNewFileUrl()} target="_blank" rel="noreferrer">在 GitHub 写一篇</a>
           <a className="btn ghost" href={CONTRIB_URL} target="_blank" rel="noreferrer">查看投稿说明</a>
           <button type="button" className="btn ghost" onClick={onClose}>关闭</button>
         </div>

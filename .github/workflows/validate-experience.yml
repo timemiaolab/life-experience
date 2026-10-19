@@ -2,8 +2,6 @@ name: Validate experience
 
 on:
   pull_request:
-    paths:
-      - 'experiences/**'
 
 jobs:
   validate:
@@ -18,4 +16,6 @@ jobs:
           cache: npm
       - run: npm ci
       - name: 校验投稿文件
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: bash scripts/validate-experience-pr.sh
