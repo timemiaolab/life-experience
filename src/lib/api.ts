@@ -39,9 +39,9 @@ export async function fetchApprovedGraph(): Promise<FetchGraphResult> {
       return { success: false, error: `Failed to fetch links: ${linksError.message}` };
     }
 
-    // Fetch vote counts
+    // Fetch vote counts from public_vote_counts view (anon has access)
     const { data: votesData, error: votesError } = await supabase
-      .from('vote_counts')
+      .from('public_vote_counts')
       .select('principle_id, count');
 
     const votes: Record<string, number> = {};
