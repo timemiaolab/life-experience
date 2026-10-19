@@ -67,9 +67,27 @@ export async function fetchApprovedGraph(): Promise<FetchGraphResult> {
 
     const links: Link[] = (linksData || []).map((l) => [l.from_id, l.to_id]);
 
-    // We don't fetch full contributions in Phase 1 (they're in submissions table)
-    // For now, just return empty contributions array
-    const contributions: Contribution[] = [];
+    // Fetch contributors (non-demo only for production count)
+    const { data: contributorsData } = await supabase
+      .from('contributors')
+      .select('id, origin, profession, region, age, city, demo, created_at')
+      .eq('demo', false);
+    
+    const contributions: Contribution[] = (contributorsData || []).map((c) => ({
+      id: c.id,
+      identity: {
+        origin: c.origin,
+        profession: c.profession,
+        region: c.region || '',
+        age: c.age,
+        city: c.city || undefined,
+      },
+      story: '', // Story text not fetched in Phase 1
+      createdAt: c.created_at,
+      sceneIds: [], // Scene mapping not available yet
+      engine: 'llm',
+      demo: c.demo,
+    }));
 
     const data: AppData = {
       version: 1,
@@ -77,7 +95,7 @@ export async function fetchApprovedGraph(): Promise<FetchGraphResult> {
       links,
       contributions,
       votes,
-      myVotes: [], // Will be loaded from localStorage
+      myVotes: [],
     };
 
     return { success: true, data };

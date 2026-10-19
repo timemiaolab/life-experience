@@ -9,6 +9,7 @@ interface Props {
   idx: Index;
   view: View;
   filterOn: boolean;
+  locked: boolean;
   onSelect: (id: string | null) => void;
   onVote: (id: string) => void;
 }
@@ -29,7 +30,7 @@ function Story({ c, scenes, onSelect }: { c: Contribution; scenes: GNode[]; onSe
   );
 }
 
-export function DetailPanel({ node: n, data, idx, view, filterOn, onSelect, onVote }: Props) {
+export function DetailPanel({ node: n, data, idx, view, filterOn, locked, onSelect, onVote }: Props) {
   if (!n) return <div className="detail" />;
   const L = layerOf(n.layer);
   const ups = (idx.ups.get(n.id) ?? []).map((x) => idx.byId.get(x)!).filter(Boolean);
@@ -53,9 +54,13 @@ export function DetailPanel({ node: n, data, idx, view, filterOn, onSelect, onVo
   const li = LI[n.layer];
 
   return (
-    <div className="detail open" data-testid="detail">
+    <div className={`detail${locked ? ' open' : ''}`} data-testid="detail">
+      {locked && <div className="detail-overlay" onClick={() => onSelect(null)} />}
       <div className="dp" style={{ ['--c' as string]: L.color }}>
-        <div className="top"><span>{L.en} · {codeOf(n, data.nodes)}</span><button type="button" className="x" title="关闭" onClick={() => onSelect(null)}>✕</button></div>
+        <div className="top">
+          <span>{L.en} · {codeOf(n, data.nodes)}</span>
+          <button type="button" className="x" title="关闭 (Esc)" onClick={() => onSelect(null)}>✕</button>
+        </div>
         <h2>{n.title}</h2>
         <div className="date">{n.layer === 'scene' ? `#${n.tag || '未分类'} · ` : ''}{n.createdAt ?? '—'}{n.user ? ' · 社区新增' : n.demo ? ' · 示例数据' : ''}</div>
         <div className="bar" />

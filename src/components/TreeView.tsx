@@ -10,8 +10,10 @@ interface Props {
   order: Record<Layer, GNode[]>;
   focusSet: Set<string> | null;
   selected: string | null;
+  locked: boolean;
   onSelect: (id: string | null) => void;
   onHover: (id: string | null) => void;
+  onCanvasClick: () => void;
   fresh: Set<string>;
   scrollTarget: { id: string; t: number } | null;
   flashLayer: { k: Layer; t: number } | null;
@@ -33,11 +35,77 @@ function offsetIn(el: HTMLElement, root: HTMLElement) {
 }
 
 export function TreeView(p: Props) {
-  const { data, idx, view, order, focusSet, selected, fresh } = p;
+  const { data, idx, view, order, focusSet, selected, locked, fresh } = p;
   const innerRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const nodeEls = useRef(new Map<string, HTMLDivElement>());
   const [geo, setGeo] = useState<{ w: number; h: number; links: Geo[] }>({ w: 0, h: 0, links: [] });
+  
+  // Zoom state
+  const [zoom, setZoom] = useState(() => {
+    const saved = localStorage.getItem('tree-zoom');
+    return saved ? parseFloat(saved) : 1;
+  });
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStart = useRef({ x: 0, y: 0, px: 0, py: 0 });
+  
+  // Save zoom to localStorage
+  useEffect(() => {
+    localStorage.setItem('tree-zoom', zoom.toString());
+  }, [zoom]);
+  
+  // Zoom handlers
+  const handleZoomIn = () => setZoom((z) => Math.min(z * 1.2, 3));
+  const handleZoomOut = () => setZoom((z) => Math.max(z / 1.2, 0.3));
+  const handleZoomReset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+  const handleZoomFit = () => {
+    const container = innerRef.current?.parentElement;
+    if (!container || !geo.w || !geo.h) return;
+    const pw = container.clientWidth - 80;
+    const ph = container.clientHeight - 80;
+    const scale = Math.min(pw / geo.w, ph / geo.h, 1);
+    setZoom(scale);
+    setPan({ x: 0, y: 0 });
+  };
+  
+  // Wheel zoom: Ctrl/Cmd+wheel
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const delta = -e.deltaY * 0.01;
+      setZoom((z) => Math.max(0.3, Math.min(3, z + delta * z * 0.5)));
+    };
+    const el = innerRef.current;
+    if (el) el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el?.removeEventListener('wheel', handleWheel);
+  }, []);
+  
+  // Pan handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.target === innerRef.current || (e.target as HTMLElement).classList.contains('tree-bg')) {
+      setIsPanning(true);
+      panStart.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
+      e.preventDefault();
+    }
+  };
+  
+  useEffect(() => {
+    if (!isPanning) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      const dx = e.clientX - panStart.current.x;
+      const dy = e.clientY - panStart.current.y;
+      setPan({ x: panStart.current.px + dx, y: panStart.current.py + dy });
+    };
+    const handleMouseUp = () => setIsPanning(false);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isPanning, pan.x, pan.y]);
 
   const visibleLinks = useMemo(
     () => data.links.filter(([a, b]) => view.visible.has(a) && view.visible.has(b) && idx.byId.has(a) && idx.byId.has(b)),
@@ -164,8 +232,28 @@ export function TreeView(p: Props) {
 
   const focusOn = !!focusSet;
   return (
-    <div className="scroll" onClick={(e) => { if (!(e.target as HTMLElement).closest('.node')) p.onSelect(null); }}>
-      <div className={`inner${focusOn ? ' focus' : ''}`} ref={innerRef}>
+    <div className="scroll" onClick={(e) => { 
+      if (!(e.target as HTMLElement).closest('.node, .zoom-controls')) {
+        p.onCanvasClick();
+      }
+    }}>
+      <div className="zoom-controls">
+        <button onClick={handleZoomIn} title="放大 (Ctrl/Cmd + Wheel)">+</button>
+        <button onClick={handleZoomOut} title="缩小">−</button>
+        <button onClick={handleZoomReset} title="重置">1:1</button>
+        <button onClick={handleZoomFit} title="适应屏幕">⊡</button>
+        <span className="zoom-level">{Math.round(zoom * 100)}%</span>
+      </div>
+      <div 
+        className={`inner${focusOn ? ' focus' : ''}${isPanning ? ' panning' : ''}`} 
+        ref={innerRef}
+        onMouseDown={handleMouseDown}
+        style={{ 
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          transformOrigin: '0 0',
+          cursor: isPanning ? 'grabbing' : 'default'
+        }}
+      >
         <svg className="links" width={geo.w} height={geo.h} viewBox={`0 0 ${geo.w || 1} ${geo.h || 1}`} data-testid="links">
           <defs>
             <filter id="lblur" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="2.6" /></filter>
@@ -213,9 +301,9 @@ export function TreeView(p: Props) {
                         data-id={n.id}
                         data-layer={n.layer}
                         ref={(el) => { if (el) nodeEls.current.set(n.id, el); else nodeEls.current.delete(n.id); }}
-                        onMouseEnter={() => p.onHover(n.id)}
-                        onMouseLeave={() => p.onHover(null)}
-                        onClick={(e) => { e.stopPropagation(); p.onSelect(selected === n.id ? null : n.id); }}
+                        onMouseEnter={() => !locked && p.onHover(n.id)}
+                        onMouseLeave={() => !locked && p.onHover(null)}
+                        onClick={(e) => { e.stopPropagation(); p.onSelect(n.id); }}
                       >
                         {nodeBody(n)}
                       </div>
