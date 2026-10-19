@@ -193,7 +193,13 @@ export function TreeView(p: Props) {
   const panBox = () => {
     const container = scrollRef.current;
     const grid = gridRef.current;
-    if (!container || !grid) return null;
+    const inner = innerRef.current;
+    if (!container || !grid || !inner) return null;
+    const cards: { x: number; y: number; w: number; h: number }[] = [];
+    for (const el of nodeEls.current.values()) {
+      const o = offsetIn(el, inner);
+      cards.push({ x: o.x, y: o.y, w: o.w, h: o.h });
+    }
     return {
       cw: container.clientWidth,
       ch: container.clientHeight,
@@ -204,6 +210,7 @@ export function TreeView(p: Props) {
       zoom: zoomRef.current,
       scrollLeft: container.scrollLeft,
       scrollTop: container.scrollTop,
+      cards,
     };
   };
 
