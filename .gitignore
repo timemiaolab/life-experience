@@ -10,3 +10,9 @@ dist-ssr
 .vscode/*
 !.vscode/extensions.json
 .idea
+
+# Test artifacts
+/*.png
+/serve-*/
+/test-*.mjs
+/*.bundle
