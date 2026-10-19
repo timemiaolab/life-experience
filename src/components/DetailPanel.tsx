@@ -31,7 +31,7 @@ function Story({ c, scenes, onSelect }: { c: Contribution; scenes: GNode[]; onSe
 }
 
 export function DetailPanel({ node: n, data, idx, view, filterOn, locked, onSelect, onVote }: Props) {
-  if (!n) return <div className="detail" />;
+  if (!n) return <div className="detail" data-testid="detail" />;
   const L = layerOf(n.layer);
   const ups = (idx.ups.get(n.id) ?? []).map((x) => idx.byId.get(x)!).filter(Boolean);
   const downs = (idx.downs.get(n.id) ?? []).map((x) => idx.byId.get(x)!).filter(Boolean);
