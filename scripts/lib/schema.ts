@@ -15,6 +15,8 @@ export interface ExtractedPrinciple {
   sceneIndexes: number[];
   ideaId: string;
   similarity?: number;
+  nearestId?: string;
+  nearestTitle?: string;
 }
 
 export interface ExtractedIdea {
@@ -132,7 +134,7 @@ export function validateExtraction(raw: unknown, graph: GraphFile): { ok: true; 
       if (!meaningId) return { ok: false, error: `ideas[${i}].meaningId 无效` };
       const temp = parseTempRef(meaningId);
       if (temp != null) {
-        if (temp < 0 || temp >= meanings.length || meanings[temp].action !== 'new') {
+        if (temp < 0 || temp >= meanings.length) {
           return { ok: false, error: `ideas[${i}].meaningId「${meaningId}」指向的本轮 meaning 不存在` };
         }
       } else if (!meaningIds.has(meaningId)) {
@@ -219,6 +221,6 @@ export const EXTRACT_JSON_INSTRUCTIONS = `只输出一个 JSON 对象，不要 M
 规则：
 - scenes 1–4，必须是具体发生的事，禁止「学到的经验 / 感悟 / 心得」这类抽象标题。
 - principles 1–6；每个 scene 必须被至少一个 principle.sceneIndexes 引用。
-- 本轮新建的 idea / meaning 用临时 id：「new:0」表示 ideas[0] / meanings[0]。principle.ideaId 与 idea.meaningId 可写已有 id 或 new:N。
+- 本轮新建或合并的 idea / meaning 用临时 id：「new:0」表示 ideas[0] / meanings[0]（含本轮 merge）。principle.ideaId 与 idea.meaningId 可写已有 id 或 new:N。
 - 每个 new principle 必须连到一个 idea；每个 new idea 必须连到一个 meaning；禁止孤儿节点。
 - merge 必须带已有 existingId。title≤40字，desc≤400字。`;

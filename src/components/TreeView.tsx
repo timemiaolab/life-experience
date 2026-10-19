@@ -166,7 +166,7 @@ export function TreeView(p: Props) {
   const rafRef = useRef(0);
   const endTimer = useRef(0);
   const zoomingRef = useRef(false);
-  const wheelAcc = useRef({ dy: 0, mx: 0, my: 0 });
+  const wheelAcc = useRef({ dy: 0, mx: 0, my: 0, panX: 0, panY: 0 });
   const originCache = useRef<{ left: number; top: number } | null>(null);
   const safariBase = useRef<{ zoom: number; pan: { x: number; y: number } } | null>(null);
   const persistAtEnd = useRef(false);
@@ -247,10 +247,27 @@ export function TreeView(p: Props) {
     const container = scrollRef.current;
     if (container && nodeEls.current.size) {
       const view = container.getBoundingClientRect();
-      const cards = [...nodeEls.current.values()].map((el) => el.getBoundingClientRect());
-      panRef.current = nudgePanForCards(panRef.current, view, cards);
+      const measure = () => [...nodeEls.current.values()].map((el) => el.getBoundingClientRect());
+      panRef.current = nudgePanForCards(panRef.current, view, measure());
+      paint();
+      panRef.current = nudgePanForCards(panRef.current, view, measure());
       paint();
     }
+  };
+
+  const panElIntoView = (el: HTMLElement) => {
+    const container = scrollRef.current;
+    if (!container) return;
+    foldScrollIntoPan();
+    const view = container.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    let dx = 0;
+    let dy = 0;
+    if (box.left < view.left) dx += view.left - box.left;
+    else if (box.right > view.right) dx += view.right - box.right;
+    if (box.top < view.top) dy += view.top - box.top;
+    else if (box.bottom > view.bottom) dy += view.bottom - box.bottom;
+    if (dx || dy) applyPanZoom({ x: panRef.current.x + dx, y: panRef.current.y + dy });
   };
 
   const finishGesture = (persist: boolean, clampNow = false) => {
@@ -290,6 +307,11 @@ export function TreeView(p: Props) {
       applyZoomAt(zoomRef.current * Math.exp(-acc.dy * 0.002), mouseX, mouseY);
       acc.dy = 0;
     }
+    if (acc.panX || acc.panY) {
+      panRef.current = { x: panRef.current.x - acc.panX, y: panRef.current.y - acc.panY };
+      acc.panX = 0;
+      acc.panY = 0;
+    }
     paint();
   };
 
@@ -312,17 +334,23 @@ export function TreeView(p: Props) {
   const handleZoomIn = () => { applyPanZoom(panRef.current, Math.min(zoomRef.current * 1.2, 2.5)); persistZoom(); };
   const handleZoomOut = () => { applyPanZoom(panRef.current, Math.max(zoomRef.current / 1.2, 0.3)); persistZoom(); };
   const handleZoomReset = () => {
-    const c = scrollRef.current;
-    if (c) { c.scrollLeft = 0; c.scrollTop = 0; }
+    foldScrollIntoPan();
     applyPanZoom({ x: 0, y: 0 }, 1);
     persistZoom();
   };
   const handleZoomFit = () => {
     const container = scrollRef.current;
-    const g = geoRef.current;
-    if (!container || !g.w || !g.h) return;
-    const scale = Math.min((container.clientWidth - 80) / g.w, (container.clientHeight - 80) / g.h, 1);
-    applyPanZoom({ x: 0, y: 0 }, scale);
+    const grid = gridRef.current;
+    if (!container || !grid) return;
+    foldScrollIntoPan();
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    const gw = Math.max(1, grid.offsetWidth);
+    const gh = Math.max(1, grid.offsetHeight);
+    const scale = Math.max(0.3, Math.min((cw - 24) / gw, (ch - 24) / gh, 1));
+    const x = (cw - gw * scale) / 2 - grid.offsetLeft * scale;
+    const y = (ch - gh * scale) / 2 - grid.offsetTop * scale;
+    applyPanZoom({ x, y }, scale);
     persistZoom();
   };
 
@@ -330,18 +358,29 @@ export function TreeView(p: Props) {
     const el = scrollRef.current;
     if (!el) return;
     const handleWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      if (!originCache.current) {
-        const r = el.getBoundingClientRect();
-        originCache.current = { left: r.left, top: r.top };
+      let dx = e.deltaX;
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) { dx *= 16; dy *= 16; }
+      else if (e.deltaMode === 2) { dx *= el.clientWidth; dy *= el.clientHeight; }
+      if (e.ctrlKey || e.metaKey) {
+        if (!originCache.current) {
+          const r = el.getBoundingClientRect();
+          originCache.current = { left: r.left, top: r.top };
+        }
+        setBusy(true);
+        wheelAcc.current.dy += dy;
+        wheelAcc.current.mx = e.clientX;
+        wheelAcc.current.my = e.clientY;
+        scheduleFlush();
+        finishGesture(true);
+        return;
       }
       setBusy(true);
-      wheelAcc.current.dy += e.deltaY;
-      wheelAcc.current.mx = e.clientX;
-      wheelAcc.current.my = e.clientY;
+      wheelAcc.current.panX += dx;
+      wheelAcc.current.panY += dy;
       scheduleFlush();
-      finishGesture(true);
+      finishGesture(false);
     };
     type GEv = Event & { scale: number; clientX: number; clientY: number };
     const onGStart = (e: Event) => {
@@ -525,7 +564,7 @@ export function TreeView(p: Props) {
     if (!p.flashLayer) return;
     const col = colRefs.current.get(p.flashLayer.k);
     if (!col) return;
-    col.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    panElIntoView(col);
     col.classList.remove('flash');
     void col.offsetWidth;
     col.classList.add('flash');
@@ -533,13 +572,17 @@ export function TreeView(p: Props) {
 
   useEffect(() => {
     if (!p.scrollTarget) return;
-    const h = window.setTimeout(() => nodeEls.current.get(p.scrollTarget!.id)?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' }), 80);
+    const h = window.setTimeout(() => {
+      const el = nodeEls.current.get(p.scrollTarget!.id);
+      if (el) panElIntoView(el);
+    }, 80);
     return () => window.clearTimeout(h);
   }, [p.scrollTarget]);
 
   useEffect(() => {
     if (!selected) return;
-    nodeEls.current.get(selected)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    const el = nodeEls.current.get(selected);
+    if (el) panElIntoView(el);
   }, [selected]);
 
   const register = useCallback((id: string, el: HTMLDivElement | null) => {
