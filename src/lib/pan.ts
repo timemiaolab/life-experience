@@ -32,14 +32,16 @@ export function clampPan(pan: { x: number; y: number }, box: PanBox): { x: numbe
   return { x, y };
 }
 
+const MIN_CARD = 24;
+
 export function cardOverlapsView(
   card: { left: number; top: number; right: number; bottom: number },
   view: { left: number; top: number; right: number; bottom: number },
-  min = 8,
+  min = MIN_CARD,
 ): boolean {
   const ox = Math.max(0, Math.min(view.right, card.right) - Math.max(view.left, card.left));
   const oy = Math.max(0, Math.min(view.bottom, card.bottom) - Math.max(view.top, card.top));
-  return ox > min && oy > min;
+  return ox >= min && oy >= min;
 }
 
 /** Screen-space nudge so at least one card overlaps the viewport. pan deltas = pixel deltas. */
@@ -64,9 +66,9 @@ export function nudgePanForCards(
   }
   let dx = 0;
   let dy = 0;
-  if (best.right < view.left + 8) dx = view.left + 8 - best.right;
-  else if (best.left > view.right - 8) dx = view.right - 8 - best.left;
-  if (best.bottom < view.top + 8) dy = view.top + 8 - best.bottom;
-  else if (best.top > view.bottom - 8) dy = view.bottom - 8 - best.top;
+  if (best.right < view.left + MIN_CARD) dx = view.left + MIN_CARD - best.right;
+  else if (best.left > view.right - MIN_CARD) dx = view.right - MIN_CARD - best.left;
+  if (best.bottom < view.top + MIN_CARD) dy = view.top + MIN_CARD - best.bottom;
+  else if (best.top > view.bottom - MIN_CARD) dy = view.bottom - MIN_CARD - best.top;
   return { x: pan.x + dx, y: pan.y + dy };
 }
