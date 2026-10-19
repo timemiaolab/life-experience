@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { AppData, Contribution, GNode } from '../types';
 import { LI, LAYERS, breakdown, codeOf, identityText, layerOf, type Index, type View } from '../lib/graph';
-import { DIMS, ORIGIN_COLORS } from '../data/identity';
+import { DIMS, ORIGIN_COLORS, displayIdentityValue } from '../data/identity';
 
 interface Props {
   node: GNode | null;
@@ -28,7 +28,7 @@ function Story({ c, scenes, onSelect }: { c: Contribution; scenes: GNode[]; onSe
   return (
     <div className="story">
       <div className="st-h">
-        <span className="og" style={{ ['--oc' as string]: ORIGIN_COLORS[c.identity.origin] ?? '#00f0ff' }}>{c.identity.origin}</span>
+        <span className="og" style={{ ['--oc' as string]: ORIGIN_COLORS[c.identity.origin] ?? '#00f0ff' }}>{displayIdentityValue('origin', c.identity.origin)}</span>
         <span className="st-id">{who}</span>
         <em>{engineBadge(c)} · {c.createdAt}</em>
       </div>

@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { AppData, GNode, Layer } from '../types';
-import { LAYERS, breakdown, codeOf, layerOf, linkKey, type Index, type View } from '../lib/graph';
-import { ORIGIN_COLORS, originLabel } from '../data/identity';
+import { LAYERS, breakdown, codeOf, identityText, layerOf, linkKey, type Index, type View } from '../lib/graph';
+import { ORIGIN_COLORS, displayIdentityValue, originLabel } from '../data/identity';
 import { clampPan, nudgePanForCards } from '../lib/pan';
 
 interface Props {
@@ -105,9 +105,9 @@ const NodeCard = memo(function NodeCard({
         <div className="id">
           <span>{code} · #{n.tag || '未分类'}</span>
           {c && (
-            <span className="who" title={`${c.identity.origin} · ${c.identity.profession} · ${c.identity.city || ''} ${c.identity.region} · ${c.identity.age}`}>
-              <span className="og" style={{ ['--oc' as string]: ORIGIN_COLORS[o] ?? '#00f0ff' }}>{o}</span>
-              {c.identity.profession}·{c.identity.age}
+            <span className="who" title={identityText(c.identity)}>
+              <span className="og" style={{ ['--oc' as string]: ORIGIN_COLORS[o] ?? '#00f0ff' }}>{displayIdentityValue('origin', o)}</span>
+              {displayIdentityValue('profession', c.identity.profession)}·{displayIdentityValue('age', c.identity.age)}
             </span>
           )}
           {badge}
