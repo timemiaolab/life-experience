@@ -18,7 +18,7 @@ export function FilterBar({ filter, onChange, contributions, matched, contributo
     onChange({ ...filter, [dim]: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] });
   };
   const active = filterActive(filter);
-  const totalCount = contributorCount ?? contributions.length;
+  const totalCount = contributorCount || contributions.length;
   return (
     <div className="filterbar" data-testid="filterbar">
       <div className="fb-dims">

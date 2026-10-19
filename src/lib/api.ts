@@ -116,7 +116,8 @@ export async function fetchApprovedGraph(): Promise<FetchGraphResult> {
       contributions,
       votes,
       myVotes: [],
-      contributorCount: contributorCount || 0,
+      // Prefer the head count; if it is missing/zero, count RPC facet rows (one per contributor).
+      contributorCount: contributorCount || contributions.length,
     };
 
     return { success: true, data };
