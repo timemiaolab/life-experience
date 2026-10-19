@@ -9,17 +9,20 @@ export interface DimDef {
   custom?: boolean;
 }
 
+/** 来源未写明该维度时使用；筛选行里排在最后。 */
+export const UNSTATED = '未注明';
+
 export const DIMS: DimDef[] = [
-  { key: 'origin', name: '出身', en: 'ORIGIN', options: ['农村', '大山', '县城', '三线城市', '二线城市', '一线城市'] },
+  { key: 'origin', name: '出身', en: 'ORIGIN', options: ['农村', '大山', '县城', '三线城市', '二线城市', '一线城市', UNSTATED] },
   {
     key: 'profession',
     name: '职业',
     en: 'JOB',
-    options: ['程序员', '教师', '护士', '医生', '创业者', '外卖骑手', '学生', '工厂工人', '销售'],
+    options: ['程序员', '教师', '护士', '医生', '创业者', '外卖骑手', '学生', '工厂工人', '销售', UNSTATED],
     custom: true,
   },
-  { key: 'region', name: '地区', en: 'REGION', options: ['华北', '华东', '华南', '华中', '西南', '西北', '东北'] },
-  { key: 'age', name: '年龄段', en: 'AGE', options: ['00后', '95后', '90后', '85后', '80后', '70后'] },
+  { key: 'region', name: '地区', en: 'REGION', options: ['华北', '华东', '华南', '华中', '西南', '西北', '东北', UNSTATED] },
+  { key: 'age', name: '年龄段', en: 'AGE', options: ['00后', '95后', '90后', '85后', '80后', '70后', UNSTATED] },
 ];
 
 /** 出身配色（用于身份分布条） */
@@ -30,9 +33,10 @@ export const ORIGIN_COLORS: Record<string, string> = {
   三线城市: '#ff9f1c',
   二线城市: '#ff2bd6',
   一线城市: '#b98cff',
+  [UNSTATED]: '#8a93a6',
 };
 
-export const originLabel = (o: string) => `${o}出身`;
+export const originLabel = (o: string) => (o === UNSTATED ? '出身未注明' : `${o}出身`);
 
 /** UI 默认展示的维度行数；超出的用「更多筛选」展开。改 DIMS 即可加维度。 */
 export const FILTER_VISIBLE_ROWS = 4;

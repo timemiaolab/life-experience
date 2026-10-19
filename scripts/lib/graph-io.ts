@@ -103,6 +103,16 @@ function sortContribution(c: Contribution): Contribution {
   };
   if (c.demo) out.demo = true;
   if (c.engine) out.engine = c.engine;
+  if (c.name) out.name = c.name;
+  if (c.curatedBy) out.curatedBy = c.curatedBy;
+  if (c.source) {
+    out.source = {
+      url: c.source.url,
+      title: c.source.title,
+      publisher: c.source.publisher,
+      date: c.source.date,
+    };
+  }
   return out;
 }
 

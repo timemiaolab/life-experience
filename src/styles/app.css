@@ -252,6 +252,9 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 .st-h { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #cfdcf0 }
 .st-h .st-id { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim) }
 .st-h em { font-style: normal; font-family: var(--mono); font-size: 9.5px; color: var(--cyan); flex: none }
+.st-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 4px; font-size: 11px; color: var(--dim) }
+.st-meta .src { color: var(--cyan); text-decoration: none; border-bottom: 1px dashed color-mix(in srgb, var(--cyan) 50%, transparent) }
+.st-meta .src:hover { color: #fff }
 .st-scene { font-size: 12.5px; color: var(--cyan); margin-top: 5px; cursor: pointer }
 .st-scene:hover { text-decoration: underline }
 .story p { font-size: 12.5px; line-height: 1.7; margin-top: 4px; white-space: pre-wrap }

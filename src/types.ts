@@ -6,16 +6,24 @@ export type IdentityDim = 'origin' | 'profession' | 'region' | 'age';
 
 /** 贡献者的身份标签（匿名，不含任何可识别个人信息） */
 export interface Identity {
-  /** 出身：农村 / 大山 / 县城 / 三线城市 / 二线城市 / 一线城市 */
+  /** 出身：农村 / 大山 / 县城 / 三线城市 / 二线城市 / 一线城市 / 未注明 */
   origin: string;
-  /** 职业：程序员 / 教师 / 护士 ... */
+  /** 职业：程序员 / 教师 / 护士 ... / 未注明（可自填） */
   profession: string;
-  /** 大区：华北 / 华东 / ... */
+  /** 大区：华北 / 华东 / ... / 未注明 */
   region: string;
-  /** 年龄段：00后 / 95后 ... */
+  /** 年龄段：00后 / 95后 ... / 未注明 */
   age: string;
   /** 可选：城市或省份（只做展示，不参与筛选） */
   city?: string;
+}
+
+/** 公开来源（整理稿，非本人投稿） */
+export interface ContributionSource {
+  url: string;
+  title: string;
+  publisher: string;
+  date: string;
 }
 
 /** 一次「讲一件事」的投稿 */
@@ -29,8 +37,13 @@ export interface Contribution {
   sceneIds: string[];
   /** 示例数据标记 */
   demo?: boolean;
-  /** 整理引擎：mock / llm / seed */
-  engine?: 'mock' | 'llm' | 'seed';
+  /** 整理引擎：mock / llm / seed / curated */
+  engine?: 'mock' | 'llm' | 'seed' | 'curated';
+  /** 公开姓名或常用网名（整理稿使用来源中的署名） */
+  name?: string;
+  /** 整理者署名，如「编辑部」 */
+  curatedBy?: string;
+  source?: ContributionSource;
 }
 
 export interface GNode {

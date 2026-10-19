@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { DIMS, FILTER_VISIBLE_ROWS, ORIGIN_COLORS, emptyFilter, type DimDef } from '../data/identity';
+import { DIMS, FILTER_VISIBLE_ROWS, ORIGIN_COLORS, UNSTATED, emptyFilter, type DimDef } from '../data/identity';
 import type { Contribution, Filter } from '../types';
 import { filterActive } from '../lib/graph';
 
@@ -25,8 +25,9 @@ function DimRow({
   const selected = filter[d.key] ?? [];
 
   const count = (v: string) => contributions.filter((c) => c.identity[d.key] === v).length;
-  const extra = [...new Set(contributions.map((c) => c.identity[d.key]))].filter((v) => !d.options.includes(v));
-  const opts = [...d.options, ...extra].filter((v) => count(v) > 0 || selected.includes(v));
+  const extra = [...new Set(contributions.map((c) => c.identity[d.key]))].filter((v) => v !== UNSTATED && !d.options.includes(v));
+  const base = d.options.filter((v) => v !== UNSTATED);
+  const opts = [...base, ...extra, UNSTATED].filter((v) => count(v) > 0 || selected.includes(v));
 
   const toggle = (v: string) => {
     const cur = filter[d.key] ?? [];
