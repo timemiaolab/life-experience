@@ -11,7 +11,7 @@ import { Toast } from './components/Toast';
 import { activeEngine } from './ai/organizer';
 
 export default function App() {
-  const { data, commit, vote, reset, exportJson } = useStore();
+  const { data, commit, vote, reset, exportJson, loading, usingSupabase } = useStore();
   const [filter, setFilter] = useState<Filter>(EMPTY_FILTER);
   const [selected, setSelected] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
@@ -23,6 +23,18 @@ export default function App() {
   const freshTimer = useRef<number>(0);
 
   const say = (text: string) => setToast({ text, t: Date.now() });
+  
+  // Show loading state while fetching from Supabase
+  if (loading) {
+    return (
+      <div className="app">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#00f0ff' }}>
+          <div>加载中…</div>
+        </div>
+      </div>
+    );
+  }
+  
   const idx = useMemo(() => buildIndex(data), [data]);
   const view = useMemo(() => computeView(data, idx, filter), [data, idx, filter]);
   const order = useMemo(() => orderLayers(data.nodes, idx), [data.nodes, idx]);
@@ -46,9 +58,17 @@ export default function App() {
     return c;
   }, [data.nodes, view.visible]);
 
-  const onConfirm = useCallback((p: CommitPayload) => {
-    const r = commit(p);
+  const onConfirm = useCallback(async (p: CommitPayload) => {
+    const r = await commit(p);
     setSubmitOpen(false);
+    
+    // If submitted to Supabase (Phase 1), just show a confirmation message
+    if (r.submitted) {
+      say('已提交，等待 AI 整理和审核 · 审核通过后会出现在人生树上');
+      return;
+    }
+    
+    // Local commit (offline mode)
     if (filterActive(filter) && !matchIdentity(p.identity, filter)) setFilter(EMPTY_FILTER);
     const merged = p.principles.filter((x) => x.action === 'merge').map((x) => 'merged:' + x.existingId);
     setFresh(new Set([...r.nodeIds, ...r.linkKeys, ...merged]));
@@ -82,6 +102,7 @@ export default function App() {
           <div className="tools">
             <span className="hint">悬停查看路径 · 点击查看故事</span>
             <span className={`eng-badge ${activeEngine()}`} title="AI 整理引擎">AI:{activeEngine().toUpperCase()}</span>
+            {usingSupabase && <span className="eng-badge supabase" title="已连接 Supabase">DB:SUPABASE</span>}
             <button type="button" className="btn mag" data-testid="open-submit" onClick={() => setSubmitOpen(true)}>＋ 讲一件事</button>
             <button type="button" className="btn ghost" onClick={exportJson} title="导出当前数据为 JSON">导出</button>
             <button type="button" className="btn ghost" title="清除本地修改，恢复示例数据"

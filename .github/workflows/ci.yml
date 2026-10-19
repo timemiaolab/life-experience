@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Type check
+      run: npm run typecheck
+      
+    - name: Build
+      run: npm run build
+      env:
+        # Use production Supabase config for build
+        VITE_SUPABASE_URL: https://fivighqyyxlhjhicuwvv.supabase.co
+        VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdmlnaHF5eXhsaGpoaWN1d3Z2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzNzQ5MDQsImV4cCI6MjEwNzk1MDkwNH0.Yu3o2jvrBa4VTC5dpIajjNBJltUyxkyKLze9PhxB5Uw

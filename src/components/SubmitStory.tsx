@@ -10,7 +10,7 @@ interface Props {
   open: boolean;
   data: AppData;
   onClose: () => void;
-  onConfirm: (p: CommitPayload) => void;
+  onConfirm: (p: CommitPayload) => Promise<void>;
 }
 
 type Step = 'write' | 'organizing' | 'preview';
@@ -69,12 +69,12 @@ export function SubmitStory({ open, data, onClose, onConfirm }: Props) {
     setDraft((d) => d && { ...d, principles: d.principles.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
   const removeP = (i: number) => setDraft((d) => d && { ...d, principles: d.principles.filter((_, j) => j !== i) });
 
-  const confirm = () => {
+  const confirm = async () => {
     if (!draft) return;
     if (draft.scenes.some((s) => !s.title.trim())) return setErr('› 场景标题不能为空');
     if (draft.principles.some((p) => p.action === 'new' && !p.title.trim())) return setErr('› 新原则标题不能为空');
     if (draft.principles.some((p) => !p.sceneIndexes.length)) return setErr('› 每条原则至少关联一个场景');
-    onConfirm({ identity: finalIdentity(), story: draft.anonymizedStory.trim(), engine: draft.engine, scenes: draft.scenes, principles: draft.principles });
+    await onConfirm({ identity: finalIdentity(), story: draft.anonymizedStory.trim(), engine: draft.engine, scenes: draft.scenes, principles: draft.principles });
   };
 
   const mergedN = draft?.principles.filter((p) => p.action === 'merge').length ?? 0;

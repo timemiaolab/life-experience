@@ -79,6 +79,7 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 .hint { font-family: var(--mono); font-size: 11px; color: var(--dim) }
 .eng-badge { font-family: var(--mono); font-size: 10.5px; padding: 3px 7px; border: 1px dashed var(--grn); color: var(--grn); letter-spacing: .1em }
 .eng-badge.llm { border-color: var(--vio); color: var(--vio) }
+.eng-badge.supabase { border-color: #3ecf8e; color: #3ecf8e; margin-left: 4px }
 .btn { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; color: var(--cyan); background: rgba(0, 240, 255, .06); border: 1px solid rgba(0, 240, 255, .55);
   padding: 7px 13px; cursor: pointer; clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); transition: .2s }
 .btn:hover:not(:disabled) { background: rgba(0, 240, 255, .18); box-shadow: 0 0 14px rgba(0, 240, 255, .5); color: #fff }
