@@ -148,7 +148,7 @@ export default function App() {
               onClick={() => { if (confirm('清除本地修改并恢复示例数据？')) { reset(); setSelected(null); setLocked(false); setFilter(EMPTY_FILTER); say('已恢复示例数据'); } }}>重置示例</button>
           </div>
         </header>
-        <FilterBar filter={filter} onChange={setFilter} contributions={data.contributions} matched={view.matchedContribs.size} />
+        <FilterBar filter={filter} onChange={setFilter} contributions={data.contributions} matched={view.matchedContribs.size} contributorCount={data.contributorCount} />
         <div className="body">
           <TreeView
             data={data} idx={idx} view={view} order={order} focusSet={focusSet}

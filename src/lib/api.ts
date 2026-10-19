@@ -10,6 +10,16 @@ export interface FetchGraphResult {
   error?: string;
 }
 
+interface IdentityFacetRow {
+  id: string;
+  origin: string | null;
+  profession: string | null;
+  region: string | null;
+  age: string | null;
+  city: string | null;
+  node_ids: string[] | null;
+}
+
 /**
  * Fetch approved graph data from Supabase
  * Returns nodes, links, and vote counts for the approved knowledge graph
@@ -77,9 +87,12 @@ export async function fetchApprovedGraph(): Promise<FetchGraphResult> {
     const { data: facetsData, error: facetsError } = await supabase.rpc('get_identity_facets');
     
     // Transform facets into Contribution objects using real contributor ids
+    // so computeView can match scene.contributionId === contribution.id.
+    // If the RPC 404s or errors, leave contributions empty (no chips, no crash).
     const contributions: Contribution[] = [];
-    if (!facetsError && facetsData) {
-      facetsData.forEach((facet: any) => {
+    if (!facetsError && Array.isArray(facetsData)) {
+      for (const facet of facetsData as IdentityFacetRow[]) {
+        if (!facet?.id) continue;
         contributions.push({
           id: facet.id,
           identity: {
@@ -87,13 +100,13 @@ export async function fetchApprovedGraph(): Promise<FetchGraphResult> {
             profession: facet.profession || '',
             region: facet.region || '',
             age: facet.age || '',
-            city: facet.city,
+            city: facet.city || undefined,
           },
           story: '',
           createdAt: '',
           sceneIds: facet.node_ids || [],
         });
-      });
+      }
     }
 
     const data: AppData = {

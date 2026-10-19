@@ -7,16 +7,18 @@ interface Props {
   onChange: (f: Filter) => void;
   contributions: Contribution[];
   matched: number;
+  contributorCount?: number;
 }
 
 /** 身份筛选：维度内多选（或），维度之间（且） */
-export function FilterBar({ filter, onChange, contributions, matched }: Props) {
+export function FilterBar({ filter, onChange, contributions, matched, contributorCount }: Props) {
   const count = (dim: IdentityDim, v: string) => contributions.filter((c) => c.identity[dim] === v).length;
   const toggle = (dim: IdentityDim, v: string) => {
     const cur = filter[dim];
     onChange({ ...filter, [dim]: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] });
   };
   const active = filterActive(filter);
+  const totalCount = contributorCount ?? contributions.length;
   return (
     <div className="filterbar" data-testid="filterbar">
       <div className="fb-dims">
@@ -50,7 +52,7 @@ export function FilterBar({ filter, onChange, contributions, matched }: Props) {
       </div>
       <div className="fb-r">
         <span className="fb-stat">
-          {active ? <>匹配 <b>{matched}</b> / {contributions.length} 位贡献者</> : <>全部 <b>{contributions.length}</b> 位贡献者</>}
+          {active ? <>匹配 <b>{matched}</b> / {totalCount} 位贡献者</> : <>全部 <b>{totalCount}</b> 位贡献者</>}
         </span>
         <button type="button" className="btn ghost sm" disabled={!active} onClick={() => onChange({ origin: [], profession: [], region: [], age: [] })}>清空筛选</button>
       </div>
