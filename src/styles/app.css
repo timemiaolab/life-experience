@@ -135,7 +135,7 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 .zoom-controls button:hover { background: rgba(0, 240, 255, .2); box-shadow: 0 0 10px rgba(0, 240, 255, .4) }
 .zoom-level { font-size: 10px; color: var(--dim); min-width: 36px; text-align: center; letter-spacing: .06em }
 
-.scroll { flex: 1; min-width: 0; overflow: hidden; position: relative; touch-action: none }
+.scroll { flex: 1; min-width: 0; overflow: auto; position: relative; touch-action: none }
 
 /* ---------- 节点 ---------- */
 .node { --c: var(--cyan); position: relative; padding: 5px 8px 5px; cursor: pointer; color: var(--txt);

@@ -70,30 +70,40 @@ export function TreeView(p: Props) {
     setPan({ x: 0, y: 0 });
   };
   
-  // Smoother wheel zoom around cursor
+  // Wheel: scroll without modifiers, zoom with Ctrl/Cmd
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return;
-      e.preventDefault();
-      
-      const container = innerRef.current?.parentElement;
-      if (!container) return;
-      
-      const rect = container.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      
-      const oldZoom = zoom;
-      const factor = Math.exp(-e.deltaY * 0.002);
-      const newZoom = Math.max(0.3, Math.min(2.5, oldZoom * factor));
-      
-      // Zoom around cursor position
-      const zoomChange = newZoom / oldZoom;
-      setPan((p) => ({
-        x: mouseX - (mouseX - p.x) * zoomChange,
-        y: mouseY - (mouseY - p.y) * zoomChange,
-      }));
-      setZoom(newZoom);
+      if (e.ctrlKey || e.metaKey) {
+        // Zoom around cursor
+        e.preventDefault();
+        
+        const container = innerRef.current?.parentElement;
+        if (!container) return;
+        
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        const oldZoom = zoom;
+        const factor = Math.exp(-e.deltaY * 0.002);
+        const newZoom = Math.max(0.3, Math.min(2.5, oldZoom * factor));
+        
+        const zoomChange = newZoom / oldZoom;
+        setPan((p) => ({
+          x: mouseX - (mouseX - p.x) * zoomChange,
+          y: mouseY - (mouseY - p.y) * zoomChange,
+        }));
+        setZoom(newZoom);
+      } else {
+        // Pan the view: vertical by default, horizontal with shift or deltaX
+        const dx = e.shiftKey ? e.deltaY : (e.deltaX || 0);
+        const dy = e.shiftKey ? 0 : e.deltaY;
+        
+        setPan((p) => ({
+          x: p.x - dx,
+          y: p.y - dy,
+        }));
+      }
     };
     const el = innerRef.current?.parentElement;
     if (el) el.addEventListener('wheel', handleWheel, { passive: false });
@@ -208,11 +218,13 @@ export function TreeView(p: Props) {
     };
   }, [isPanning, pan.x, pan.y, p]);
   
-  // Clear hover when unlocking
+  // Clear hover when unlocking (true → false transition)
+  const prevLockedRef = useRef(locked);
   useEffect(() => {
-    if (!locked) {
+    if (prevLockedRef.current && !locked) {
       p.onHover(null);
     }
+    prevLockedRef.current = locked;
   }, [locked, p]);
 
   const visibleLinks = useMemo(

@@ -89,7 +89,9 @@ export function Sidebar({ counts, activeLayer, onJump, people, usingSupabase, da
       <div className="legend">
         <div className="row"><span className="sw" style={{ color: 'var(--cyan)' }} />左侧 · 正向：总结 / 提炼 / 升华</div>
         <div className="row"><span className="sw" style={{ color: 'var(--mag)' }} />右侧 · 反馈：检查 / 优化 / 影响</div>
-        <div className="row people">贡献者 <b>{people.matched}</b> / {people.total} 位 {usingSupabase && data.contributorCount ? `(总计 ${data.contributorCount})` : ''}</div>
+        <div className="row people">
+          贡献者 <b>{usingSupabase ? (data.nodes.filter(n => n.contributionId).length || people.total) : people.total}</b> 位
+        </div>
         <div className="demo">⚠ DEMO DATA · 示例投稿均为虚构，仅供演示</div>
       </div>
     </aside>

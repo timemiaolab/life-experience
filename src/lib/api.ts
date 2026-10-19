@@ -67,12 +67,7 @@ export async function fetchApprovedGraph(): Promise<FetchGraphResult> {
 
     const links: Link[] = (linksData || []).map((l) => [l.from_id, l.to_id]);
 
-    // Count total contributors (including demo) via head request
-    const { count: contributorCount } = await supabase
-      .from('contributors')
-      .select('id', { count: 'exact', head: true });
-    
-    // Create placeholder contributions for the count display
+    // Placeholder contributions for offline mode compatibility
     const contributions: Contribution[] = [];
 
     const data: AppData = {
@@ -82,7 +77,6 @@ export async function fetchApprovedGraph(): Promise<FetchGraphResult> {
       contributions,
       votes,
       myVotes: [],
-      contributorCount: contributorCount || 0,
     };
 
     return { success: true, data };
