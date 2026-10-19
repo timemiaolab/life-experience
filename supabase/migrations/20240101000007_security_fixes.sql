@@ -21,6 +21,19 @@ CREATE POLICY "Admins can read submissions"
   ON submissions FOR SELECT
   USING (EXISTS (SELECT 1 FROM admins WHERE user_id = auth.uid()));
 
+-- ========== (e) Update is_admin to set search_path (no DROP - policies depend on it) ==========
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM admins WHERE user_id = auth.uid()
+  );
+$$;
+
 -- ========== (b) Fix approve/reject functions to use auth.uid() ==========
 DROP FUNCTION IF EXISTS approve_proposal(TEXT, UUID);
 CREATE OR REPLACE FUNCTION approve_proposal(p_proposal_id TEXT)
@@ -170,47 +183,7 @@ BEGIN
 END;
 $$;
 
--- Update is_admin to set search_path
-DROP FUNCTION IF EXISTS is_admin();
-CREATE OR REPLACE FUNCTION is_admin()
-RETURNS BOOLEAN
-LANGUAGE sql
-SECURITY DEFINER
-STABLE
-SET search_path = public
-AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM admins WHERE user_id = auth.uid()
-  );
-$$;
-
--- ========== (c) Restrict votes DELETE policy ==========
-DROP POLICY IF EXISTS "Anyone can delete own votes" ON votes;
-CREATE POLICY "Users can delete own votes"
-  ON votes FOR DELETE
-  USING (voter_fingerprint = current_setting('request.headers', true)::json->>'x-fingerprint');
-
--- Note: For better security, the frontend should send a consistent fingerprint header
--- For now, we allow deletion based on fingerprint matching
-
--- ========== (d) Revoke unnecessary function execution rights ==========
--- Revoke from public (anon/authenticated inherit from public)
-REVOKE EXECUTE ON FUNCTION refresh_vote_counts() FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION approve_proposal(TEXT) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION reject_proposal(TEXT, TEXT) FROM PUBLIC;
-
--- Grant only to authenticated users (admins check is inside the function)
-GRANT EXECUTE ON FUNCTION approve_proposal(TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION reject_proposal(TEXT, TEXT) TO authenticated;
-
--- Keep is_admin usable by policies (SECURITY DEFINER handles access)
-GRANT EXECUTE ON FUNCTION is_admin() TO anon, authenticated;
-
--- refresh_vote_counts should only be called by admins or background jobs
--- Grant to authenticated, gated by is_admin check
-GRANT EXECUTE ON FUNCTION refresh_vote_counts() TO authenticated;
-
--- Update refresh_vote_counts to check admin
+-- ========== (d) Update refresh_vote_counts with admin check ==========
 DROP FUNCTION IF EXISTS refresh_vote_counts();
 CREATE OR REPLACE FUNCTION refresh_vote_counts()
 RETURNS void
@@ -228,25 +201,53 @@ BEGIN
 END;
 $$;
 
+-- Revoke/Grant AFTER recreating the function
+REVOKE EXECUTE ON FUNCTION refresh_vote_counts() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION refresh_vote_counts() TO authenticated;
+
+-- ========== (c) Restrict votes DELETE policy ==========
+DROP POLICY IF EXISTS "Anyone can delete own votes" ON votes;
+DROP POLICY IF EXISTS "Users can delete own votes" ON votes;
+CREATE POLICY "Users can delete own votes"
+  ON votes FOR DELETE
+  USING (voter_fingerprint = current_setting('request.headers', true)::json->>'x-fingerprint');
+
+-- Note: For better security, the frontend should send a consistent fingerprint header
+-- For now, we allow deletion based on fingerprint matching
+
+-- ========== (d) Revoke unnecessary function execution rights ==========
+-- Revoke from PUBLIC and anon specifically (Supabase grants anon directly)
+REVOKE EXECUTE ON FUNCTION approve_proposal(TEXT) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION reject_proposal(TEXT, TEXT) FROM PUBLIC, anon;
+
+-- Grant only to authenticated users (admins check is inside the function)
+GRANT EXECUTE ON FUNCTION approve_proposal(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION reject_proposal(TEXT, TEXT) TO authenticated;
+
+-- Keep is_admin usable by policies (SECURITY DEFINER handles access)
+GRANT EXECUTE ON FUNCTION is_admin() TO anon, authenticated;
+
 -- ========== (f) Secure vote_counts materialized view access ==========
--- Create a safe view that wraps the materialized view
-CREATE OR REPLACE VIEW public_vote_counts AS
+-- Revoke SELECT from anon and authenticated on materialized view
+REVOKE SELECT ON vote_counts FROM PUBLIC, anon, authenticated;
+
+-- Create a safe view with security_invoker to avoid security-definer-view warning
+DROP VIEW IF EXISTS public_vote_counts;
+CREATE VIEW public_vote_counts 
+WITH (security_invoker = true)
+AS
   SELECT principle_id, count
   FROM vote_counts;
 
--- Grant SELECT on the view to anon
+-- Grant SELECT on the safe view to anon
 GRANT SELECT ON public_vote_counts TO anon, authenticated;
-
--- Note: The materialized view vote_counts itself should have restricted access
--- Only the public_vote_counts view is exposed to anon users
-REVOKE SELECT ON vote_counts FROM PUBLIC;
-GRANT SELECT ON vote_counts TO authenticated;
 
 -- ========== Comments and documentation ==========
 COMMENT ON FUNCTION approve_proposal IS 'Approve a proposal and atomically update the graph. Admin only (checks auth.uid()).';
 COMMENT ON FUNCTION reject_proposal IS 'Reject a proposal with a reason. Admin only (checks auth.uid()).';
 COMMENT ON FUNCTION refresh_vote_counts IS 'Refresh the materialized vote counts view. Admin only.';
-COMMENT ON VIEW public_vote_counts IS 'Public read-only view of vote counts.';
+COMMENT ON FUNCTION is_admin IS 'Check if current user is admin. Uses auth.uid() and SECURITY DEFINER.';
+COMMENT ON VIEW public_vote_counts IS 'Public read-only view of vote counts with security_invoker=true.';
 
 -- ========== (g) Vector extension schema ==========
 -- Decision: Keep pgvector in public schema

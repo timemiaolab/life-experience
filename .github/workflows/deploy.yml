@@ -120,7 +120,8 @@ jobs:
           
           # Mark as applied
           execute_sql "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('$migration_version') ON CONFLICT DO NOTHING" || {
-            echo "⚠️  Warning: Could not mark $migration_version as applied"
+            echo "❌ CRITICAL: Could not mark $migration_version as applied"
+            exit 1
           }
           
           echo "✓ Applied $migration_version"

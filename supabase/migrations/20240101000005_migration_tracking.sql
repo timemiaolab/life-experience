@@ -2,16 +2,10 @@
 -- This table tracks which migrations have been applied to prevent duplicate execution
 -- Compatible with Supabase CLI's schema versioning
 
-CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (
-  version TEXT PRIMARY KEY,
-  applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- Create schema if it doesn't exist
+-- Create schema first
 CREATE SCHEMA IF NOT EXISTS supabase_migrations;
 
--- Recreate table in correct schema if it was created in wrong place
-DROP TABLE IF EXISTS public.schema_migrations;
+-- Create table in correct schema
 CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (
   version TEXT PRIMARY KEY,
   applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
