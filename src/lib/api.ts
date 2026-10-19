@@ -73,24 +73,25 @@ export async function fetchApprovedGraph(): Promise<FetchGraphResult> {
       .select('id', { count: 'exact', head: true });
 
     // Fetch identity facets for filtering (without exposing contributor data)
+    // Falls back to empty array if RPC errors/404s
     const { data: facetsData, error: facetsError } = await supabase.rpc('get_identity_facets');
     
-    // Transform facets into synthetic contributions for FilterBar compatibility
+    // Transform facets into Contribution objects using real contributor ids
     const contributions: Contribution[] = [];
     if (!facetsError && facetsData) {
-      facetsData.forEach((facet: any, idx: number) => {
+      facetsData.forEach((facet: any) => {
         contributions.push({
-          id: `facet-${idx}`,
+          id: facet.id,
           identity: {
             origin: facet.origin || '',
             profession: facet.profession || '',
             region: facet.region || '',
             age: facet.age || '',
+            city: facet.city,
           },
           story: '',
           createdAt: '',
           sceneIds: facet.node_ids || [],
-          status: 'approved',
         });
       });
     }
