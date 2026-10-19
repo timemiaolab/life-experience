@@ -27,44 +27,46 @@ export function clampPan(pan: { x: number; y: number }, box: PanBox): { x: numbe
   const scaledH = box.gridH * box.zoom;
   const offX = box.gridLeft * box.zoom - (box.scrollLeft ?? 0);
   const offY = box.gridTop * box.zoom - (box.scrollTop ?? 0);
-  let x = clampAxis(pan.x, scaledW, offX, box.cw, minVisible);
-  let y = clampAxis(pan.y, scaledH, offY, box.ch, minVisible);
-  return ensureCardInView({ x, y }, box);
+  const x = clampAxis(pan.x, scaledW, offX, box.cw, minVisible);
+  const y = clampAxis(pan.y, scaledH, offY, box.ch, minVisible);
+  return { x, y };
 }
 
-/** If the clamped slice is an empty corner of the grid, nudge to the nearest card. */
-export function ensureCardInView(pan: { x: number; y: number }, box: PanBox): { x: number; y: number } {
-  const cards = box.cards;
-  if (!cards?.length) return pan;
-  const z = box.zoom;
-  const sl = box.scrollLeft ?? 0;
-  const st = box.scrollTop ?? 0;
-  const shown = (c: PanCard, p: { x: number; y: number }) => {
-    const l = c.x * z + p.x - sl;
-    const t = c.y * z + p.y - st;
-    const ox = Math.max(0, Math.min(box.cw, l + c.w * z) - Math.max(0, l));
-    const oy = Math.max(0, Math.min(box.ch, t + c.h * z) - Math.max(0, t));
-    return ox > 8 && oy > 8;
-  };
-  if (cards.some((c) => shown(c, pan))) return pan;
-  let best = pan;
+export function cardOverlapsView(
+  card: { left: number; top: number; right: number; bottom: number },
+  view: { left: number; top: number; right: number; bottom: number },
+  min = 8,
+): boolean {
+  const ox = Math.max(0, Math.min(view.right, card.right) - Math.max(view.left, card.left));
+  const oy = Math.max(0, Math.min(view.bottom, card.bottom) - Math.max(view.top, card.top));
+  return ox > min && oy > min;
+}
+
+/** Screen-space nudge so at least one card overlaps the viewport. pan deltas = pixel deltas. */
+export function nudgePanForCards(
+  pan: { x: number; y: number },
+  view: { left: number; top: number; right: number; bottom: number },
+  cards: { left: number; top: number; right: number; bottom: number }[],
+): { x: number; y: number } {
+  if (!cards.length || cards.some((c) => cardOverlapsView(c, view))) return pan;
+  const cx = (view.left + view.right) / 2;
+  const cy = (view.top + view.bottom) / 2;
+  let best = cards[0];
   let bestD = Infinity;
   for (const c of cards) {
-    const l0 = c.x * z - sl;
-    const t0 = c.y * z - st;
-    const w = Math.max(1, c.w * z);
-    const h = Math.max(1, c.h * z);
-    let x = pan.x;
-    let y = pan.y;
-    if (l0 + x + w < 8) x = 8 - l0 - w;
-    if (l0 + x > box.cw - 8) x = box.cw - 8 - l0;
-    if (t0 + y + h < 8) y = 8 - t0 - h;
-    if (t0 + y > box.ch - 8) y = box.ch - 8 - t0;
-    const d = (x - pan.x) ** 2 + (y - pan.y) ** 2;
+    const dx = (c.left + c.right) / 2 - cx;
+    const dy = (c.top + c.bottom) / 2 - cy;
+    const d = dx * dx + dy * dy;
     if (d < bestD) {
       bestD = d;
-      best = { x, y };
+      best = c;
     }
   }
-  return best;
+  let dx = 0;
+  let dy = 0;
+  if (best.right < view.left + 8) dx = view.left + 8 - best.right;
+  else if (best.left > view.right - 8) dx = view.right - 8 - best.left;
+  if (best.bottom < view.top + 8) dy = view.top + 8 - best.bottom;
+  else if (best.top > view.bottom - 8) dy = view.bottom - 8 - best.top;
+  return { x: pan.x + dx, y: pan.y + dy };
 }

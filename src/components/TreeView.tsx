@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import type { AppData, GNode, Layer } from '../types';
 import { LAYERS, breakdown, codeOf, layerOf, linkKey, type Index, type View } from '../lib/graph';
 import { ORIGIN_COLORS, originLabel } from '../data/identity';
-import { clampPan } from '../lib/pan';
+import { clampPan, nudgePanForCards } from '../lib/pan';
 
 interface Props {
   data: AppData;
@@ -193,13 +193,7 @@ export function TreeView(p: Props) {
   const panBox = () => {
     const container = scrollRef.current;
     const grid = gridRef.current;
-    const inner = innerRef.current;
-    if (!container || !grid || !inner) return null;
-    const cards: { x: number; y: number; w: number; h: number }[] = [];
-    for (const el of nodeEls.current.values()) {
-      const o = offsetIn(el, inner);
-      cards.push({ x: o.x, y: o.y, w: o.w, h: o.h });
-    }
+    if (!container || !grid) return null;
     return {
       cw: container.clientWidth,
       ch: container.clientHeight,
@@ -210,7 +204,6 @@ export function TreeView(p: Props) {
       zoom: zoomRef.current,
       scrollLeft: container.scrollLeft,
       scrollTop: container.scrollTop,
-      cards,
     };
   };
 
@@ -232,7 +225,14 @@ export function TreeView(p: Props) {
     foldScrollIntoPan();
     const box = panBox();
     panRef.current = box ? clampPan(next, { ...box, zoom }) : next;
-    schedulePaint();
+    paint();
+    const container = scrollRef.current;
+    if (container && nodeEls.current.size) {
+      const view = container.getBoundingClientRect();
+      const cards = [...nodeEls.current.values()].map((el) => el.getBoundingClientRect());
+      panRef.current = nudgePanForCards(panRef.current, view, cards);
+      paint();
+    }
   };
 
   useLayoutEffect(() => {
