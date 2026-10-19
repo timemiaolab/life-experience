@@ -1,0 +1,18 @@
+# Supabase 本地配置（仅供参考，线上项目使用 fivighqyyxlhjhicuwvv）
+project_id = "fivighqyyxlhjhicuwvv"
+
+[api]
+enabled = true
+port = 54321
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
