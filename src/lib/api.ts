@@ -67,8 +67,12 @@ export async function fetchApprovedGraph(): Promise<FetchGraphResult> {
 
     const links: Link[] = (linksData || []).map((l) => [l.from_id, l.to_id]);
 
-    // We don't fetch full contributions in Phase 1 (they're in submissions table)
-    // For now, just return empty contributions array
+    // Count distinct contributors (head query for efficiency)
+    const { count: contributorCount } = await supabase
+      .from('contributors')
+      .select('id', { count: 'exact', head: true });
+
+    // Placeholder contributions for offline mode compatibility
     const contributions: Contribution[] = [];
 
     const data: AppData = {
@@ -77,7 +81,8 @@ export async function fetchApprovedGraph(): Promise<FetchGraphResult> {
       links,
       contributions,
       votes,
-      myVotes: [], // Will be loaded from localStorage
+      myVotes: [],
+      contributorCount: contributorCount || 0,
     };
 
     return { success: true, data };

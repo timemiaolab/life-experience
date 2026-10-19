@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EMPTY_FILTER, type Filter, type Layer } from './types';
 import { useStore, type CommitPayload } from './store/store';
 import { LAYERS, buildIndex, computeView, filterActive, matchIdentity, orderLayers, walk } from './lib/graph';
@@ -14,6 +14,7 @@ export default function App() {
   const { data, commit, vote, reset, exportJson, loading, usingSupabase } = useStore();
   const [filter, setFilter] = useState<Filter>(EMPTY_FILTER);
   const [selected, setSelected] = useState<string | null>(null);
+  const [locked, setLocked] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [fresh, setFresh] = useState<Set<string>>(new Set());
@@ -30,13 +31,13 @@ export default function App() {
   const filterOn = filterActive(filter);
 
   const sel = selected && view.visible.has(selected) ? selected : null;
-  const focusId = hovered || sel;
+  // Focus: locked selection takes priority over hover
+  const focusId = locked ? sel : (hovered || sel);
   const focusSet = useMemo(() => {
     const up = (i: string) => (idx.ups.get(i) ?? []).filter((x) => view.visible.has(x));
     const dn = (i: string) => (idx.downs.get(i) ?? []).filter((x) => view.visible.has(x));
     const path = (id: string) => [id, ...walk(id, up), ...walk(id, dn)];
     if (focusId) return new Set(path(focusId));
-    // 刚提交的故事：高亮所有新场景的完整路径
     const freshScenes = [...fresh].filter((id) => idx.byId.get(id)?.layer === 'scene' && view.visible.has(id));
     return freshScenes.length ? new Set(freshScenes.flatMap(path)) : null;
   }, [focusId, idx, view.visible, fresh]);
@@ -47,23 +48,57 @@ export default function App() {
     return c;
   }, [data.nodes, view.visible]);
 
+  const handleSelect = useCallback((id: string | null) => {
+    if (id === null) {
+      // Unlock and close
+      setSelected(null);
+      setLocked(false);
+    } else if (selected === id && locked) {
+      // Toggle off: clicking same card when locked
+      setSelected(null);
+      setLocked(false);
+    } else {
+      // Lock to new card
+      setSelected(id);
+      setLocked(true);
+    }
+  }, [selected, locked]);
+
+  const handleCanvasClick = useCallback(() => {
+    if (locked) {
+      setSelected(null);
+      setLocked(false);
+    }
+  }, [locked]);
+
+  // Keyboard: Esc to unlock
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && locked) {
+        setSelected(null);
+        setLocked(false);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [locked]);
+
   const onConfirm = useCallback(async (p: CommitPayload) => {
     const r = await commit(p);
     setSubmitOpen(false);
     
-    // If submitted to Supabase (Phase 1), just show a confirmation message
     if (r.submitted) {
       say('已提交，等待 AI 整理和审核 · 审核通过后会出现在人生树上');
       return;
     }
     
-    // Local commit (offline mode)
     if (filterActive(filter) && !matchIdentity(p.identity, filter)) setFilter(EMPTY_FILTER);
     const merged = p.principles.filter((x) => x.action === 'merge').map((x) => 'merged:' + x.existingId);
     setFresh(new Set([...r.nodeIds, ...r.linkKeys, ...merged]));
     window.clearTimeout(freshTimer.current);
     freshTimer.current = window.setTimeout(() => setFresh(new Set()), 8000);
     setSelected(null);
+    setLocked(false);
     setScrollTarget({ id: r.nodeIds[0], t: Date.now() });
     const m = p.principles.filter((x) => x.action === 'merge').length;
     say(`已加入人生树：${p.scenes.length} 个场景 · 合并 ${m} 条 · 新原则 ${p.principles.length - m} 条 · 已保存到本地`);
@@ -89,6 +124,8 @@ export default function App() {
         activeLayer={(focusId && idx.byId.get(focusId)?.layer) || flashLayer?.k || null}
         onJump={(k) => { setFlashLayer({ k, t: Date.now() }); window.setTimeout(() => setFlashLayer((f) => (f && Date.now() - f.t >= 1500 ? null : f)), 1600); }}
         people={{ matched: view.matchedContribs.size, total: data.contributions.length }}
+        usingSupabase={usingSupabase}
+        data={data}
       />
       <main>
         <header>
@@ -100,23 +137,25 @@ export default function App() {
             </div>
           </div>
           <div className="tools">
-            <span className="hint">悬停查看路径 · 点击查看故事</span>
+            <span className="hint">
+              {locked ? '🔒 已锁定 · 点击其他卡片切换 · Esc/点空白解锁' : '悬停预览 · 点击锁定高亮'}
+            </span>
             <span className={`eng-badge ${activeEngine()}`} title="AI 整理引擎">AI:{activeEngine().toUpperCase()}</span>
             {usingSupabase && <span className="eng-badge supabase" title="已连接 Supabase">DB:SUPABASE</span>}
             <button type="button" className="btn mag" data-testid="open-submit" onClick={() => setSubmitOpen(true)}>＋ 讲一件事</button>
             <button type="button" className="btn ghost" onClick={exportJson} title="导出当前数据为 JSON">导出</button>
             <button type="button" className="btn ghost" title="清除本地修改，恢复示例数据"
-              onClick={() => { if (confirm('清除本地修改并恢复示例数据？')) { reset(); setSelected(null); setFilter(EMPTY_FILTER); say('已恢复示例数据'); } }}>重置示例</button>
+              onClick={() => { if (confirm('清除本地修改并恢复示例数据？')) { reset(); setSelected(null); setLocked(false); setFilter(EMPTY_FILTER); say('已恢复示例数据'); } }}>重置示例</button>
           </div>
         </header>
         <FilterBar filter={filter} onChange={setFilter} contributions={data.contributions} matched={view.matchedContribs.size} />
         <div className="body">
           <TreeView
             data={data} idx={idx} view={view} order={order} focusSet={focusSet}
-            selected={sel} onSelect={setSelected} onHover={setHovered}
+            selected={sel} locked={locked} onSelect={handleSelect} onHover={setHovered} onCanvasClick={handleCanvasClick}
             fresh={fresh} scrollTarget={scrollTarget} flashLayer={flashLayer} originFilter={filter.origin} filterOn={filterOn}
           />
-          <DetailPanel node={node} data={data} idx={idx} view={view} filterOn={filterOn} onSelect={setSelected}
+          <DetailPanel node={node} data={data} idx={idx} view={view} filterOn={filterOn} onSelect={handleSelect} locked={locked}
             onVote={(id) => { const had = data.myVotes.includes(id); vote(id); say(had ? '已取消「有用」' : '已标记为「有用」· 保存在本地'); }} />
         </div>
       </main>

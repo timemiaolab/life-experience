@@ -10,8 +10,10 @@ interface Props {
   order: Record<Layer, GNode[]>;
   focusSet: Set<string> | null;
   selected: string | null;
+  locked: boolean;
   onSelect: (id: string | null) => void;
   onHover: (id: string | null) => void;
+  onCanvasClick: () => void;
   fresh: Set<string>;
   scrollTarget: { id: string; t: number } | null;
   flashLayer: { k: Layer; t: number } | null;
@@ -33,11 +35,202 @@ function offsetIn(el: HTMLElement, root: HTMLElement) {
 }
 
 export function TreeView(p: Props) {
-  const { data, idx, view, order, focusSet, selected, fresh } = p;
+  const { data, idx, view, order, focusSet, selected, locked, fresh } = p;
   const innerRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const nodeEls = useRef(new Map<string, HTMLDivElement>());
   const [geo, setGeo] = useState<{ w: number; h: number; links: Geo[] }>({ w: 0, h: 0, links: [] });
+  
+  // Zoom state
+  const [zoom, setZoom] = useState(() => {
+    const saved = localStorage.getItem('tree-zoom');
+    return saved ? parseFloat(saved) : 1;
+  });
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const panStart = useRef({ x: 0, y: 0, px: 0, py: 0, moved: false });
+  
+  // Save zoom to localStorage
+  useEffect(() => {
+    localStorage.setItem('tree-zoom', zoom.toString());
+  }, [zoom]);
+  
+  // Zoom handlers
+  const handleZoomIn = () => setZoom((z) => Math.min(z * 1.2, 2.5));
+  const handleZoomOut = () => setZoom((z) => Math.max(z / 1.2, 0.3));
+  const handleZoomReset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+  const handleZoomFit = () => {
+    const container = innerRef.current?.parentElement;
+    if (!container || !geo.w || !geo.h) return;
+    const pw = container.clientWidth - 80;
+    const ph = container.clientHeight - 80;
+    const scale = Math.min(pw / geo.w, ph / geo.h, 1);
+    setZoom(scale);
+    setPan({ x: 0, y: 0 });
+  };
+  
+  // Wheel zoom with Ctrl/Cmd (plain wheel uses native scrolling)
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        // Zoom around cursor
+        e.preventDefault();
+        
+        const container = innerRef.current?.parentElement;
+        if (!container) return;
+        
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        const oldZoom = zoom;
+        const factor = Math.exp(-e.deltaY * 0.002);
+        const newZoom = Math.max(0.3, Math.min(2.5, oldZoom * factor));
+        
+        const zoomChange = newZoom / oldZoom;
+        setPan((p) => ({
+          x: mouseX - (mouseX - p.x) * zoomChange,
+          y: mouseY - (mouseY - p.y) * zoomChange,
+        }));
+        setZoom(newZoom);
+      }
+      // Plain wheel (no Ctrl/Cmd): let native overflow:auto scrolling handle it
+    };
+    const el = innerRef.current?.parentElement;
+    if (el) el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el?.removeEventListener('wheel', handleWheel);
+  }, [zoom]);
+  
+  // Pinch zoom via pointer events
+  const pinchState = useRef<{ dist: number; zoom: number; pan: { x: number; y: number } } | null>(null);
+  useEffect(() => {
+    const container = innerRef.current?.parentElement;
+    if (!container) return;
+    
+    const pointers = new Map<number, PointerEvent>();
+    
+    const handlePointerDown = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') pointers.set(e.pointerId, e);
+    };
+    
+    const handlePointerMove = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      pointers.set(e.pointerId, e);
+      
+      if (pointers.size === 2) {
+        const [p1, p2] = Array.from(pointers.values());
+        const dx = p2.clientX - p1.clientX;
+        const dy = p2.clientY - p1.clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (!pinchState.current) {
+          pinchState.current = { dist, zoom, pan };
+        } else {
+          const scale = dist / pinchState.current.dist;
+          const newZoom = Math.max(0.3, Math.min(2.5, pinchState.current.zoom * scale));
+          
+          const rect = container.getBoundingClientRect();
+          const centerX = ((p1.clientX + p2.clientX) / 2) - rect.left;
+          const centerY = ((p1.clientY + p2.clientY) / 2) - rect.top;
+          
+          const zoomChange = newZoom / zoom;
+          setPan({
+            x: centerX - (centerX - pinchState.current.pan.x) * zoomChange,
+            y: centerY - (centerY - pinchState.current.pan.y) * zoomChange,
+          });
+          setZoom(newZoom);
+        }
+      }
+    };
+    
+    const handlePointerUp = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) pinchState.current = null;
+    };
+    
+    container.addEventListener('pointerdown', handlePointerDown);
+    container.addEventListener('pointermove', handlePointerMove);
+    container.addEventListener('pointerup', handlePointerUp);
+    container.addEventListener('pointercancel', handlePointerUp);
+    
+    return () => {
+      container.removeEventListener('pointerdown', handlePointerDown);
+      container.removeEventListener('pointermove', handlePointerMove);
+      container.removeEventListener('pointerup', handlePointerUp);
+      container.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [zoom, pan]);
+  
+  // Pan handlers with movement threshold
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    // Don't start pan on cards or buttons
+    if (target.closest('.node, button, .zoom-controls')) return;
+    
+    setIsPanning(true);
+    panStart.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y, moved: false };
+    e.preventDefault();
+  };
+  
+  useEffect(() => {
+    if (!isPanning) return;
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      const dx = e.clientX - panStart.current.x;
+      const dy = e.clientY - panStart.current.y;
+      
+      // Movement threshold: 5px
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        panStart.current.moved = true;
+        setIsDragging(true);
+      }
+      
+      if (panStart.current.moved) {
+        const container = innerRef.current?.parentElement;
+        if (!container) return;
+        
+        // Clamp pan so at least 100px of content stays visible
+        const minVisible = 100;
+        const maxX = container.clientWidth - minVisible;
+        const maxY = container.clientHeight - minVisible;
+        const minX = -(geo.w * zoom - minVisible);
+        const minY = -(geo.h * zoom - minVisible);
+        
+        const newX = Math.max(minX, Math.min(maxX, panStart.current.px + dx));
+        const newY = Math.max(minY, Math.min(maxY, panStart.current.py + dy));
+        
+        setPan({ x: newX, y: newY });
+      }
+    };
+    
+    const handleMouseUp = () => {
+      const wasDragging = panStart.current.moved;
+      setIsPanning(false);
+      setIsDragging(false);
+      
+      // Only trigger canvas click if didn't drag
+      if (!wasDragging) {
+        p.onCanvasClick();
+      }
+    };
+    
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isPanning, pan.x, pan.y, p]);
+  
+  // Clear hover when unlocking (true → false transition)
+  const prevLockedRef = useRef(locked);
+  useEffect(() => {
+    if (prevLockedRef.current && !locked) {
+      p.onHover(null);
+    }
+    prevLockedRef.current = locked;
+  }, [locked, p]);
 
   const visibleLinks = useMemo(
     () => data.links.filter(([a, b]) => view.visible.has(a) && view.visible.has(b) && idx.byId.has(a) && idx.byId.has(b)),
@@ -164,8 +357,23 @@ export function TreeView(p: Props) {
 
   const focusOn = !!focusSet;
   return (
-    <div className="scroll" onClick={(e) => { if (!(e.target as HTMLElement).closest('.node')) p.onSelect(null); }}>
-      <div className={`inner${focusOn ? ' focus' : ''}`} ref={innerRef}>
+    <div className="scroll" onMouseDown={handleMouseDown}>
+      <div className="zoom-controls">
+        <button onClick={handleZoomIn} title="放大 (Ctrl/Cmd + Wheel)">+</button>
+        <button onClick={handleZoomOut} title="缩小">−</button>
+        <button onClick={handleZoomReset} title="重置">1:1</button>
+        <button onClick={handleZoomFit} title="适应屏幕">⊡</button>
+        <span className="zoom-level">{Math.round(zoom * 100)}%</span>
+      </div>
+      <div 
+        className={`inner${focusOn ? ' focus' : ''}${isDragging ? ' panning' : ''}`} 
+        ref={innerRef}
+        style={{ 
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          transformOrigin: '0 0',
+          cursor: isDragging ? 'grabbing' : 'default'
+        }}
+      >
         <svg className="links" width={geo.w} height={geo.h} viewBox={`0 0 ${geo.w || 1} ${geo.h || 1}`} data-testid="links">
           <defs>
             <filter id="lblur" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="2.6" /></filter>
@@ -213,9 +421,9 @@ export function TreeView(p: Props) {
                         data-id={n.id}
                         data-layer={n.layer}
                         ref={(el) => { if (el) nodeEls.current.set(n.id, el); else nodeEls.current.delete(n.id); }}
-                        onMouseEnter={() => p.onHover(n.id)}
-                        onMouseLeave={() => p.onHover(null)}
-                        onClick={(e) => { e.stopPropagation(); p.onSelect(selected === n.id ? null : n.id); }}
+                        onMouseEnter={() => !locked && p.onHover(n.id)}
+                        onMouseLeave={() => !locked && p.onHover(null)}
+                        onClick={(e) => { e.stopPropagation(); p.onSelect(n.id); }}
                       >
                         {nodeBody(n)}
                       </div>

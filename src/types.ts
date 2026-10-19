@@ -61,6 +61,8 @@ export interface AppData {
   votes: Record<string, number>;
   /** 本机已投过「有用」的原则 */
   myVotes: string[];
+  /** 总贡献者数 (distinct contributors) */
+  contributorCount?: number;
 }
 
 export type Filter = Record<IdentityDim, string[]>;
