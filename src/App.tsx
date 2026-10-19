@@ -1,7 +1,9 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
-import { EMPTY_FILTER, type Filter, type Layer } from './types';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type Filter, type Layer } from './types';
 import { useStore } from './store/store';
 import { LAYERS, buildIndex, computeView, filterActive, orderLayers, walk } from './lib/graph';
+import { emptyFilter } from './data/identity';
+import { readFilterQuery, writeFilterQuery } from './lib/filter-query';
 import { Sidebar } from './components/Sidebar';
 import { FilterBar } from './components/FilterBar';
 import { TreeView } from './components/TreeView';
@@ -9,10 +11,15 @@ import { DetailPanel } from './components/DetailPanel';
 import { Toast } from './components/Toast';
 
 const SubmitStory = lazy(() => import('./components/SubmitStory'));
+const SIDE_KEY = 'sidebar-collapsed';
+
+function readCollapsed(): boolean {
+  try { return localStorage.getItem(SIDE_KEY) === '1'; } catch { return false; }
+}
 
 export default function App() {
   const { data, vote, reset, exportJson } = useStore();
-  const [filter, setFilter] = useState<Filter>(EMPTY_FILTER);
+  const [filter, setFilter] = useState<Filter>(() => readFilterQuery());
   const [selected, setSelected] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
@@ -21,7 +28,37 @@ export default function App() {
   const [flashLayer, setFlashLayer] = useState<{ k: Layer; t: number } | null>(null);
   const [toast, setToast] = useState<{ text: string; t: number } | null>(null);
   const [scrollTarget] = useState<{ id: string; t: number } | null>(null);
+  const [sideCollapsed, setSideCollapsed] = useState(readCollapsed);
+  const appRef = useRef<HTMLDivElement>(null);
   const say = (text: string) => setToast({ text, t: Date.now() });
+
+  useEffect(() => { writeFilterQuery(filter); }, [filter]);
+  useEffect(() => {
+    const onPop = () => setFilter(readFilterQuery());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  const toggleSide = useCallback(() => {
+    appRef.current?.classList.add('is-sidebar-animating');
+    setSideCollapsed((c) => {
+      const next = !c;
+      try { localStorage.setItem(SIDE_KEY, next ? '1' : '0'); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '[') return;
+      const t = e.target;
+      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return;
+      e.preventDefault();
+      toggleSide();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toggleSide]);
 
   const idx = useMemo(() => buildIndex(data), [data]);
   const view = useMemo(() => computeView(data, idx, filter), [data, idx, filter]);
@@ -80,12 +117,14 @@ export default function App() {
   const node = sel ? idx.byId.get(sel) ?? null : null;
 
   return (
-    <div className="app">
+    <div className={`app${sideCollapsed ? ' side-collapsed' : ''}`} ref={appRef}>
       <Sidebar
         counts={counts}
         activeLayer={(focusId && idx.byId.get(focusId)?.layer) || flashLayer?.k || null}
         onJump={(k) => { setFlashLayer({ k, t: Date.now() }); window.setTimeout(() => setFlashLayer((f) => (f && Date.now() - f.t >= 1500 ? null : f)), 1600); }}
         people={{ matched: view.matchedContribs.size, total: contributorTotal }}
+        collapsed={sideCollapsed}
+        onToggle={toggleSide}
       />
       <main>
         <header>
@@ -103,7 +142,7 @@ export default function App() {
             <button type="button" className="btn mag" data-testid="open-submit" onClick={() => setSubmitOpen(true)}>＋ 讲一件事</button>
             <button type="button" className="btn ghost" onClick={exportJson} title="导出当前数据为 JSON">导出</button>
             <button type="button" className="btn ghost" title="清除本地「有用」标记"
-              onClick={() => { if (confirm('清除本机「有用」标记并恢复视图？')) { reset(); setSelected(null); setLocked(false); setFilter(EMPTY_FILTER); say('已恢复'); } }}>重置</button>
+              onClick={() => { if (confirm('清除本机「有用」标记并恢复视图？')) { reset(); setSelected(null); setLocked(false); setFilter(emptyFilter()); say('已恢复'); } }}>重置</button>
           </div>
         </header>
         <FilterBar filter={filter} onChange={setFilter} contributions={data.contributions} matched={view.matchedContribs.size} />

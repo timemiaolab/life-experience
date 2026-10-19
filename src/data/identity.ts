@@ -1,4 +1,4 @@
-import type { IdentityDim } from '../types';
+import type { Filter, IdentityDim } from '../types';
 
 export interface DimDef {
   key: IdentityDim;
@@ -33,3 +33,10 @@ export const ORIGIN_COLORS: Record<string, string> = {
 };
 
 export const originLabel = (o: string) => `${o}出身`;
+
+/** UI 默认展示的维度行数；超出的用「更多筛选」展开。改 DIMS 即可加维度。 */
+export const FILTER_VISIBLE_ROWS = 4;
+
+export function emptyFilter(): Filter {
+  return Object.fromEntries(DIMS.map((d) => [d.key, [] as string[]])) as Filter;
+}

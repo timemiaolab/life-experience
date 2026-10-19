@@ -163,6 +163,14 @@ export function TreeView(p: Props) {
 
   const zoomRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
+  const rafRef = useRef(0);
+  const endTimer = useRef(0);
+  const zoomingRef = useRef(false);
+  const wheelAcc = useRef({ dy: 0, mx: 0, my: 0 });
+  const originCache = useRef<{ left: number; top: number } | null>(null);
+  const safariBase = useRef<{ zoom: number; pan: { x: number; y: number } } | null>(null);
+  const persistAtEnd = useRef(false);
+  const clampAtEnd = useRef(true);
   const onCanvasClickRef = useRef(p.onCanvasClick);
   onCanvasClickRef.current = p.onCanvasClick;
   const geoRef = useRef(geo);
@@ -211,6 +219,25 @@ export function TreeView(p: Props) {
     }
   };
 
+  const setBusy = (on: boolean) => {
+    const inner = innerRef.current;
+    const tree = inner?.parentElement?.parentElement;
+    const body = tree?.parentElement;
+    if (on) {
+      if (!zoomingRef.current) {
+        zoomingRef.current = true;
+        if (inner) inner.style.willChange = 'transform';
+        tree?.classList.add('is-zooming');
+        body?.classList.add('is-zooming');
+      }
+    } else if (zoomingRef.current) {
+      zoomingRef.current = false;
+      if (inner) inner.style.willChange = '';
+      tree?.classList.remove('is-zooming');
+      body?.classList.remove('is-zooming');
+    }
+  };
+
   const applyPanZoom = (next: { x: number; y: number }, zoom = zoomRef.current) => {
     zoomRef.current = zoom;
     foldScrollIntoPan();
@@ -225,6 +252,54 @@ export function TreeView(p: Props) {
       paint();
     }
   };
+
+  const finishGesture = (persist: boolean, clampNow = false) => {
+    persistAtEnd.current = persist;
+    if (clampNow) {
+      applyPanZoom(panRef.current, zoomRef.current);
+      clampAtEnd.current = false;
+    } else {
+      clampAtEnd.current = true;
+    }
+    window.clearTimeout(endTimer.current);
+    endTimer.current = window.setTimeout(() => {
+      if (clampAtEnd.current) applyPanZoom(panRef.current, zoomRef.current);
+      if (persistAtEnd.current) persistZoom();
+      setBusy(false);
+      originCache.current = null;
+    }, 150);
+  };
+
+  const applyZoomAt = (newZoom: number, mouseX: number, mouseY: number) => {
+    const oldZoom = zoomRef.current;
+    const z = Math.max(0.3, Math.min(2.5, newZoom));
+    if (z === oldZoom) return;
+    const k = z / oldZoom;
+    const p0 = panRef.current;
+    zoomRef.current = z;
+    panRef.current = { x: mouseX - (mouseX - p0.x) * k, y: mouseY - (mouseY - p0.y) * k };
+  };
+
+  const flushWheel = () => {
+    rafRef.current = 0;
+    const acc = wheelAcc.current;
+    if (acc.dy) {
+      const origin = originCache.current;
+      const mouseX = origin ? acc.mx - origin.left : acc.mx;
+      const mouseY = origin ? acc.my - origin.top : acc.my;
+      applyZoomAt(zoomRef.current * Math.exp(-acc.dy * 0.002), mouseX, mouseY);
+      acc.dy = 0;
+    }
+    paint();
+  };
+
+  const scheduleFlush = () => {
+    if (rafRef.current) return;
+    rafRef.current = requestAnimationFrame(flushWheel);
+  };
+
+  const layoutBusy = () =>
+    zoomingRef.current || document.querySelector('.app')?.classList.contains('is-sidebar-animating');
 
   useLayoutEffect(() => {
     try {
@@ -257,20 +332,53 @@ export function TreeView(p: Props) {
     const handleWheel = (e: WheelEvent) => {
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      const container = scrollRef.current;
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      const oldZoom = zoomRef.current;
-      const newZoom = Math.max(0.3, Math.min(2.5, oldZoom * Math.exp(-e.deltaY * 0.002)));
-      const k = newZoom / oldZoom;
-      const p0 = panRef.current;
-      applyPanZoom({ x: mouseX - (mouseX - p0.x) * k, y: mouseY - (mouseY - p0.y) * k }, newZoom);
-      persistZoom();
+      if (!originCache.current) {
+        const r = el.getBoundingClientRect();
+        originCache.current = { left: r.left, top: r.top };
+      }
+      setBusy(true);
+      wheelAcc.current.dy += e.deltaY;
+      wheelAcc.current.mx = e.clientX;
+      wheelAcc.current.my = e.clientY;
+      scheduleFlush();
+      finishGesture(true);
     };
+    type GEv = Event & { scale: number; clientX: number; clientY: number };
+    const onGStart = (e: Event) => {
+      e.preventDefault();
+      const ge = e as GEv;
+      safariBase.current = { zoom: zoomRef.current, pan: { ...panRef.current } };
+      const r = el.getBoundingClientRect();
+      originCache.current = { left: r.left, top: r.top };
+      wheelAcc.current.mx = ge.clientX;
+      wheelAcc.current.my = ge.clientY;
+      setBusy(true);
+    };
+    const onGChange = (e: Event) => {
+      e.preventDefault();
+      const ge = e as GEv;
+      const base = safariBase.current;
+      if (!base) return;
+      const origin = originCache.current;
+      const mouseX = origin ? ge.clientX - origin.left : ge.clientX;
+      const mouseY = origin ? ge.clientY - origin.top : ge.clientY;
+      zoomRef.current = base.zoom;
+      panRef.current = { ...base.pan };
+      applyZoomAt(base.zoom * (ge.scale || 1), mouseX, mouseY);
+      if (!rafRef.current) rafRef.current = requestAnimationFrame(() => { rafRef.current = 0; paint(); });
+      finishGesture(true);
+    };
+    const onGEnd = (e: Event) => { e.preventDefault(); safariBase.current = null; finishGesture(true, true); };
     el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => el.removeEventListener('wheel', handleWheel);
+    el.addEventListener('gesturestart', onGStart, { passive: false });
+    el.addEventListener('gesturechange', onGChange, { passive: false });
+    el.addEventListener('gestureend', onGEnd, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+      el.removeEventListener('gesturestart', onGStart);
+      el.removeEventListener('gesturechange', onGChange);
+      el.removeEventListener('gestureend', onGEnd);
+    };
   }, []);
 
   const pinchState = useRef<{ dist: number; zoom: number; pan: { x: number; y: number } } | null>(null);
@@ -287,21 +395,22 @@ export function TreeView(p: Props) {
       const dist = Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY);
       if (!pinchState.current) {
         pinchState.current = { dist, zoom: zoomRef.current, pan: { ...panRef.current } };
+        originCache.current = (() => { const r = container.getBoundingClientRect(); return { left: r.left, top: r.top }; })();
+        setBusy(true);
         return;
       }
-      const newZoom = Math.max(0.3, Math.min(2.5, pinchState.current.zoom * (dist / pinchState.current.dist)));
-      const rect = container.getBoundingClientRect();
-      const cx = (p1.clientX + p2.clientX) / 2 - rect.left;
-      const cy = (p1.clientY + p2.clientY) / 2 - rect.top;
-      const k = newZoom / pinchState.current.zoom;
-      applyPanZoom({
-        x: cx - (cx - pinchState.current.pan.x) * k,
-        y: cy - (cy - pinchState.current.pan.y) * k,
-      }, newZoom);
+      const newZoom = pinchState.current.zoom * (dist / pinchState.current.dist);
+      const origin = originCache.current;
+      const cx = origin ? (p1.clientX + p2.clientX) / 2 - origin.left : 0;
+      const cy = origin ? (p1.clientY + p2.clientY) / 2 - origin.top : 0;
+      zoomRef.current = pinchState.current.zoom;
+      panRef.current = { ...pinchState.current.pan };
+      applyZoomAt(newZoom, cx, cy);
+      if (!rafRef.current) rafRef.current = requestAnimationFrame(() => { rafRef.current = 0; paint(); });
     };
     const handlePointerUp = (e: PointerEvent) => {
       pointers.delete(e.pointerId);
-      if (pointers.size < 2) { pinchState.current = null; persistZoom(); }
+      if (pointers.size < 2) { pinchState.current = null; finishGesture(true, true); }
     };
     container.addEventListener('pointerdown', handlePointerDown);
     container.addEventListener('pointermove', handlePointerMove);
@@ -326,14 +435,23 @@ export function TreeView(p: Props) {
       if (!start.moved && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
         start.moved = true;
         innerRef.current?.classList.add('panning');
+        setBusy(true);
       }
-      if (start.moved) applyPanZoom({ x: start.px + dx, y: start.py + dy });
+      if (!start.moved) return;
+      panRef.current = { x: start.px + dx, y: start.py + dy };
+      if (!rafRef.current) {
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = 0;
+          paint();
+        });
+      }
     };
     const up = () => {
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
       innerRef.current?.classList.remove('panning');
       if (!start.moved) onCanvasClickRef.current();
+      else finishGesture(false, true);
     };
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
@@ -373,18 +491,31 @@ export function TreeView(p: Props) {
 
   useEffect(() => {
     let raf = 0;
-    const redraw = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(recalc); };
+    const redraw = () => {
+      if (layoutBusy()) return;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(recalc);
+    };
     const ro = new ResizeObserver(redraw);
     if (gridRef.current) ro.observe(gridRef.current);
     if (innerRef.current) ro.observe(innerRef.current);
     window.addEventListener('resize', redraw);
-    return () => { ro.disconnect(); window.removeEventListener('resize', redraw); cancelAnimationFrame(raf); };
+    window.addEventListener('layout-settled', redraw);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', redraw);
+      window.removeEventListener('layout-settled', redraw);
+      cancelAnimationFrame(raf);
+    };
   }, [recalc]);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => applyPanZoom(panRef.current));
+    const ro = new ResizeObserver(() => {
+      if (layoutBusy()) return;
+      applyPanZoom(panRef.current);
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);

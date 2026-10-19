@@ -25,11 +25,25 @@ body::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-i
 body::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 79;
   background: radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, .55)) }
 button, input, textarea, select { font: inherit }
-.app { display: grid; grid-template-columns: 290px 1fr; height: 100vh }
+.app { display: flex; height: 100vh }
 
 /* ---------- 侧栏 ---------- */
-.side { border-right: 1px solid var(--line); background: linear-gradient(180deg, rgba(6, 10, 20, .95), rgba(6, 8, 16, .9));
-  display: flex; flex-direction: column; position: relative; z-index: 2; box-shadow: 4px 0 30px rgba(0, 240, 255, .06); min-height: 0 }
+.side { width: 290px; flex: none; border-right: 1px solid var(--line); background: linear-gradient(180deg, rgba(6, 10, 20, .95), rgba(6, 8, 16, .9));
+  display: flex; flex-direction: column; position: relative; z-index: 2; box-shadow: 4px 0 30px rgba(0, 240, 255, .06); min-height: 0;
+  overflow: hidden; transition: width .22s ease }
+.app.side-collapsed .side { width: 44px }
+.side-toggle { position: absolute; top: 8px; right: 8px; z-index: 4; width: 28px; height: 28px; padding: 0;
+  font-family: var(--mono); font-size: 14px; color: var(--cyan); background: rgba(0, 240, 255, .08);
+  border: 1px solid rgba(0, 240, 255, .45); cursor: pointer }
+.side-toggle:hover, .side-toggle:focus-visible { background: rgba(0, 240, 255, .2); outline: 1px solid var(--cyan) }
+.app.side-collapsed .side-toggle { right: 8px; left: 8px }
+.side-rail { display: none; flex-direction: column; align-items: center; gap: 8px; padding: 48px 0 12px; flex: 1 }
+.app.side-collapsed .side-rail { display: flex }
+.rail-ico { --c: var(--cyan); width: 28px; height: 28px; padding: 0; font-size: 12px; color: var(--c);
+  background: color-mix(in srgb, var(--c) 10%, transparent); border: 1px solid color-mix(in srgb, var(--c) 55%, transparent); cursor: pointer }
+.rail-ico:hover, .rail-ico.on, .rail-ico:focus-visible { background: color-mix(in srgb, var(--c) 22%, transparent); outline: none }
+.side-body { display: flex; flex-direction: column; flex: 1; min-height: 0 }
+.app.side-collapsed .side-body { visibility: hidden }
 .brand { padding: 16px 18px 10px; border-bottom: 1px solid var(--line) }
 .brand .logo { font-family: var(--mono); font-weight: 900; letter-spacing: .18em; font-size: 16px; color: var(--cyan);
   text-shadow: 0 0 6px var(--cyan), 0 0 18px rgba(0, 240, 255, .5) }
@@ -82,14 +96,26 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 .btn.sm { padding: 4px 10px; font-size: 11px }
 
 /* ---------- 身份筛选 ---------- */
-.filterbar { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; padding: 8px 22px 8px; border-bottom: 1px solid var(--line);
+.filterbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; align-items: start; padding: 8px 22px 8px; border-bottom: 1px solid var(--line);
   background: linear-gradient(90deg, rgba(0, 240, 255, .03), transparent) }
-.fb-dims { display: flex; flex-wrap: wrap; gap: 6px 22px; min-width: 0 }
-.fb-dim { display: flex; flex-wrap: wrap; align-items: center; gap: 5px }
-.fb-l { font-size: 12px; color: #fff; font-weight: 700; margin-right: 3px; letter-spacing: .1em }
+.fb-dims { display: grid; grid-template-columns: 4.75em minmax(0, 1fr) auto; column-gap: 10px; row-gap: 6px; align-items: start; min-width: 0 }
+.fb-l { font-size: 12px; color: #fff; font-weight: 700; letter-spacing: .1em; padding-top: 5px; white-space: nowrap }
 .fb-l i { font-style: normal; font-family: var(--mono); font-size: 9px; color: var(--dim); margin-left: 4px; letter-spacing: .14em; font-weight: 400 }
-.chipbtn { --pc: var(--cyan); font-size: 12px; padding: 2px 8px; color: #cfdcf0; background: transparent; border: 1px solid rgba(255, 255, 255, .14); cursor: pointer; transition: .15s }
-.chipbtn em { font-style: normal; font-family: var(--mono); font-size: 10px; color: var(--dim); margin-left: 5px }
+.fb-chips-clip { min-width: 0; overflow: hidden; max-height: 26px }
+.fb-chips-clip.open { max-height: none }
+.fb-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center }
+.fb-meta { display: flex; align-items: center; gap: 6px; white-space: nowrap; padding-top: 4px }
+.fb-sel { font-family: var(--mono); font-size: 10px; color: var(--yel) }
+.fb-link { font-family: var(--mono); font-size: 11px; color: var(--cyan); background: none; border: none; cursor: pointer; padding: 0 }
+.fb-link:disabled { opacity: .35; cursor: default }
+.fb-link:hover:not(:disabled), .fb-link:focus-visible { text-decoration: underline; outline: none }
+.fb-more { grid-column: 1 / -1; justify-self: start; font-family: var(--mono); font-size: 11px; color: var(--mag); background: none; border: none; cursor: pointer; padding: 2px 0 }
+.chipbtn { --pc: var(--cyan); font-size: 12px; padding: 2px 8px; color: #cfdcf0; background: transparent; border: 1px solid rgba(255, 255, 255, .14); cursor: pointer; transition: .15s;
+  display: inline-flex; align-items: center; gap: 5px }
+.chipbtn input { appearance: none; width: 12px; height: 12px; margin: 0; border: 1px solid color-mix(in srgb, var(--pc) 70%, #fff); background: transparent; flex: none; position: relative }
+.chipbtn input:checked { background: var(--pc) }
+.chipbtn input:checked::after { content: ""; position: absolute; left: 3px; top: 1px; width: 4px; height: 7px; border: solid #05060b; border-width: 0 2px 2px 0; transform: rotate(45deg) }
+.chipbtn em { font-style: normal; font-family: var(--mono); font-size: 10px; color: var(--dim); margin-left: 1px }
 .chipbtn:hover { border-color: var(--pc); color: #fff }
 .chipbtn.on { border-color: var(--pc); color: #fff; background: color-mix(in srgb, var(--pc) 20%, transparent); box-shadow: 0 0 10px color-mix(in srgb, var(--pc) 45%, transparent) }
 .chipbtn.on em { color: #fff }
@@ -293,8 +319,25 @@ header { display: flex; align-items: center; justify-content: space-between; gap
   border: 1px solid var(--yel); background: rgba(10, 10, 0, .88); padding: 8px 16px; box-shadow: 0 0 16px rgba(252, 238, 10, .35); transition: .3s; pointer-events: none }
 .toast.show { opacity: 1; transform: translateX(-50%) }
 
+/* pinch / ctrl+wheel / drag：关掉贵效果，只留 transform */
+.body.is-zooming .lk .glow { filter: none }
+.body.is-zooming .lk .flow { animation: none }
+.body.is-zooming .node { box-shadow: 0 0 0 1px rgba(0, 0, 0, .5); transition: none }
+.body.is-zooming .node::before, .body.is-zooming .node::after { filter: none }
+.body.is-zooming .node:hover, .body.is-zooming .node.sel { box-shadow: 0 0 0 1px rgba(0, 0, 0, .5) }
+.body.is-zooming .detail { backdrop-filter: none }
+.app.is-sidebar-animating .links { contain: strict }
+
 @media (max-width: 900px) {
-  body { overflow: auto } .app { grid-template-columns: 1fr; height: auto } .side { height: auto } .flow { height: 520px } main { height: 100vh } .hint { display: none } .pv { grid-template-columns: 1fr }
+  body { overflow: auto }
+  .app { flex-direction: column; height: auto }
+  .side { width: 100%; height: auto; transition: max-height .22s ease, width .22s ease; max-height: 80vh }
+  .app.side-collapsed .side { width: 100%; max-height: 44px }
+  .app.side-collapsed .side-rail { flex-direction: row; padding: 8px 44px 8px 8px; }
+  .flow { height: 520px }
+  main { height: 100vh }
+  .hint { display: none }
+  .pv { grid-template-columns: 1fr }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
