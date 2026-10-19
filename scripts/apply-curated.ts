@@ -6,9 +6,10 @@
  * embedMissing() backfills them on the next real ingest run.
  */
 import { basename, join, resolve } from 'node:path';
+import { anonymize } from '../src/ai/anonymize.ts';
 import { applyExtraction, formatNote } from './lib/apply-ingest.ts';
-import { loadEmbeddings, loadGraph, ROOT, saveGraph } from './lib/graph-io.ts';
-import { readExperience } from './lib/parse-experience.ts';
+import { loadEmbeddings, loadGraph, ROOT, saveGraph, type GraphFile } from './lib/graph-io.ts';
+import { readExperience, type ExperienceDoc } from './lib/parse-experience.ts';
 import { validateExtraction, type IngestExtraction } from './lib/schema.ts';
 
 const DIR = resolve(ROOT, 'experiences');
@@ -150,7 +151,7 @@ const JOBS: { file: string; extraction: IngestExtraction }[] = [
       scenes: [
         {
           title: '工厂辞职八年，每天喊养母记住自己',
-          desc: '养母失智后没有送养老院，辞职住到身边穿衣喂饭、下楼散步。',
+          desc: '养母失智后没有送养老院，辞职住到身边穿衣喂饭、下楼散步。这八年的陪伴没有白费：母亲忘了许多往事，却还没有忘记女儿。',
           areaId: 'a2',
           tag: '家庭',
         },
@@ -273,12 +274,39 @@ const JOBS: { file: string; extraction: IngestExtraction }[] = [
   },
 ];
 
-function alreadyApplied(graph: ReturnType<typeof loadGraph>, doc: { sourceUrl?: string; name?: string; file: string }): boolean {
-  return graph.contributions.some((c) => {
-    if (doc.sourceUrl && c.source?.url === doc.sourceUrl) return true;
-    if (doc.name && c.name === doc.name && c.engine === 'curated') return true;
-    return false;
+function findCurated(graph: GraphFile, doc: { sourceUrl?: string; name?: string }) {
+  if (!doc.sourceUrl || !doc.name) return undefined;
+  return graph.contributions.find((c) => c.source?.url === doc.sourceUrl && c.name === doc.name);
+}
+
+/** Skip creating nodes when sourceUrl+name already exist; still sync story/scene text. */
+function refreshCurated(graph: GraphFile, doc: ExperienceDoc, extraction: IngestExtraction): boolean {
+  const c = findCurated(graph, doc);
+  if (!c) return false;
+  let dirty = false;
+  const { text: story } = anonymize(doc.story);
+  if (c.story !== story) {
+    c.story = story;
+    dirty = true;
+  }
+  c.sceneIds.forEach((sid, i) => {
+    const spec = extraction.scenes[i];
+    const node = graph.nodes.find((n) => n.id === sid);
+    if (!spec || !node) return;
+    if (node.title !== spec.title) {
+      node.title = spec.title;
+      dirty = true;
+    }
+    if ((node.desc ?? '') !== spec.desc) {
+      node.desc = spec.desc;
+      dirty = true;
+    }
   });
+  return dirty;
+}
+
+function alreadyApplied(graph: GraphFile, doc: { sourceUrl?: string; name?: string }): boolean {
+  return !!findCurated(graph, doc);
 }
 
 function main() {
@@ -297,7 +325,12 @@ function main() {
       process.exit(1);
     }
     if (alreadyApplied(graph, parsed.doc)) {
-      reports.push(`跳过 ${basename(job.file)}：来源已在图谱中`);
+      if (refreshCurated(graph, parsed.doc, job.extraction)) {
+        changed = true;
+        reports.push(`更新 ${basename(job.file)}：已同步正文与场景`);
+      } else {
+        reports.push(`跳过 ${basename(job.file)}：来源已在图谱中`);
+      }
       continue;
     }
     const v = validateExtraction(job.extraction, graph);

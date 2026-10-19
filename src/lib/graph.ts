@@ -1,4 +1,5 @@
 import type { AppData, Contribution, Filter, GNode, Identity, IdentityDim, Layer, Link } from '../types';
+import { displayIdentityValue } from '../data/identity';
 
 export const LAYERS: { key: Layer; name: string; en: string; color: string; prefix: string }[] = [
   { key: 'area', name: '工作&生活', en: 'L0 // DOMAIN', color: '#39ff9c', prefix: 'DOM' },
@@ -131,4 +132,9 @@ export function codeOf(n: GNode, all: GNode[]): string {
 
 export const linkKey = (l: Link) => `${l[0]}>${l[1]}`;
 
-export const identityText = (i: Identity) => [i.origin, i.profession, i.city || i.region, i.age].filter(Boolean).join(' · ');
+export const identityText = (i: Identity) => [
+  i.origin ? displayIdentityValue('origin', i.origin) : '',
+  i.profession ? displayIdentityValue('profession', i.profession) : '',
+  i.city || (i.region ? displayIdentityValue('region', i.region) : ''),
+  i.age ? displayIdentityValue('age', i.age) : '',
+].filter(Boolean).join(' · ');

@@ -36,7 +36,19 @@ export const ORIGIN_COLORS: Record<string, string> = {
   [UNSTATED]: '#8a93a6',
 };
 
-export const originLabel = (o: string) => (o === UNSTATED ? '出身未注明' : `${o}出身`);
+/** 身份行展示用：未注明写成「出身未注明」等；筛选项仍用 UNSTATED。 */
+export const UNSTATED_LABEL: Record<IdentityDim, string> = {
+  origin: '出身未注明',
+  profession: '职业未注明',
+  region: '地区未注明',
+  age: '年龄未注明',
+};
+
+export function displayIdentityValue(dim: IdentityDim, value: string): string {
+  return value === UNSTATED ? UNSTATED_LABEL[dim] : value;
+}
+
+export const originLabel = (o: string) => (o === UNSTATED ? UNSTATED_LABEL.origin : `${o}出身`);
 
 /** UI 默认展示的维度行数；超出的用「更多筛选」展开。改 DIMS 即可加维度。 */
 export const FILTER_VISIBLE_ROWS = 4;
