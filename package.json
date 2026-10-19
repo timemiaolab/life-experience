@@ -2,7 +2,7 @@
   "name": "life-experience",
   "private": true,
   "version": "0.1.0",
-  "description": "人生经验社区 · 场景 → 原则 → 理念 → 人生意义（前端原型）",
+  "description": "人生经验社区 · 场景 → 原则 → 理念 → 人生意义（静态站点）",
   "type": "module",
   "engines": {
     "node": ">=20.19.0"
@@ -11,10 +11,13 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "ingest": "tsx scripts/ingest.ts",
+    "ingest:dry-run": "tsx scripts/ingest.ts --dry-run",
+    "validate:experience": "tsx scripts/validate-experience.ts",
+    "export-graph": "tsx scripts/export-graph.ts"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.118.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
@@ -23,6 +26,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.0",
+    "tsx": "^4.20.5",
     "typescript": "~5.9.3",
     "vite": "^8.0.0"
   }

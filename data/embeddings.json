@@ -1,0 +1,5 @@
+{
+  "model": "text-embedding-004",
+  "dim": 768,
+  "vectors": {}
+}

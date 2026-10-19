@@ -1,3 +1,7 @@
+# Supabase Backend（已停用运行时）
+
+> **2026-10：** 站点改为纯静态。前端不再读写 Supabase；GitHub Pages 的 `deploy.yml` **不再应用本目录迁移**。保留迁移文件仅作历史与数据参考，请勿在新流程中依赖这些表。
+
 # Supabase Backend
 
 人生经验社区的 Supabase 后端配置和数据库迁移。
@@ -139,11 +143,7 @@ RESET ROLE;
 
 ## 生产部署
 
-迁移通过 GitHub Actions 自动应用到生产环境（使用 Supabase Management API）。
-
-**不要**尝试使用 `supabase db push` 或 Supabase CLI 直接推送，因为：
-1. 这需要 service role key（不应该在客户端暴露）
-2. CI/CD 工作流会自动处理
+**已停用。** `deploy.yml` 只构建静态前端并发布 GitHub Pages，**不再应用本目录迁移**。保留文件仅作历史参考。
 
 ## 审核函数
 

@@ -16,3 +16,6 @@ dist-ssr
 /serve-*/
 /test-*.mjs
 /*.bundle
+
+# Build-copied compact graph (pretty source of truth is data/graph.json)
+public/data/graph.json
