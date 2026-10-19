@@ -50,10 +50,17 @@ npm run preview      # 需 VITE_BASE_PATH=/life-experience/ 时与线上一致
 
 ```bash
 # 仓库 Settings → Secrets：GEMINI_API_KEY（主）、SILICONFLOW_API_KEY（备用）
+# 可选仓库 Variables：GEMINI_CHAT_MODEL（默认 gemini-flash-latest）
+#                     GEMINI_EMBED_MODEL（默认 gemini-embedding-001）
+#                     GEMINI_EMBED_DIM（默认 768）
 npx tsx scripts/ingest.ts --dry-run --mock-response /tmp/mock.json /tmp/sample.md
 ```
 
-密钥都缺失时，ingest 工作流会**明确失败**并提示去配 Secrets。
+密钥都缺失时，ingest 工作流会**明确失败**并提示去配 Secrets。嵌入失败也会失败（不会静默跳过近重判断）。对话模型 404 时会回退到 SiliconFlow，并在日志和 PR 摘要里写明原因。
+
+**站长必须打开**：仓库 Settings → Actions → General → Workflow permissions → **Allow GitHub Actions to create and approve pull requests**。否则 fork 投稿时机器人无法开收录 PR。
+
+整理任务有并发组 `ingest-<PR号>`（取消进行中的旧运行）、每日约 20 次上限（超出需管理员打标签 `ai-ok`），且只处理「恰好一篇 `experiences/*.md`」的投稿 PR。
 
 ---
 
@@ -87,6 +94,8 @@ supabase/migrations/         历史迁移（不再自动应用）
 
 - 投稿正文视为**数据**，提示词禁止执行其中的指令；只接受通过 JSON 结构校验的模型输出
 - Fork PR 的 `pull_request` **没有** Secrets；整理必须 `pull_request_target` + 只 checkout base
+- 工作流把 PR 的 `head.ref` / `base.ref` / 仓库名 / 编号放进 `env:`，shell 只用 `"$HEAD_REF"` 这类引号变量，避免脚本注入
+- `GITHUB_TOKEN` 开出的收录 PR 不会触发 CI，所以 ingest 自己跑 typecheck/build，并把 `@投稿者` 与 `Co-authored-by` 写进提交/摘要
 - 身份标签匿名：出身 / 职业 / 地区 / 年龄段 / 可选城市，无姓名邮箱
 
 示例投稿为虚构演示，不代表真实个人。

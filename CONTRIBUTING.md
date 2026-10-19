@@ -26,13 +26,15 @@ YAML 头字段：
 | `age` / `年龄段` | 年龄段 | 00后 / 95后 / 90后 / 85后 / 80后 / 70后 |
 | `city` | 城市 | 可选 |
 
-投稿 PR **只能改** `experiences/*.md`。校验工作流不需要密钥；失败时会用中文说明原因。
+投稿 PR **只能改** `experiences/*.md`（一次一篇）。文件名请用当天日期加短 slug，例如 `2026-10-19-bei-caiyuan.md`；不要用占位名 `YYYY-MM-DD-bian-ti.md`。校验工作流不需要密钥；失败时会用中文说明原因。纯代码 PR（不改投稿，或代码和模板一起改）不会被投稿规则判红。
 
 ### 站长审核一次即可
 
 - **同一仓库的分支 PR**：整理脚本会把 `data/graph.json` 的改动推回这条 PR。你只审查、合并这一条。  
-- **Fork PR**：脚本用 `pull_request_target` **只检出 main 上的代码**，把投稿 md 当纯数据读入，在本仓库开一条 `ingest/pr-编号` 收录 PR（含 md + 图谱 JSON）。请合并收录 PR，原投稿 PR 可关闭。  
-- Fork PR **拿不到** API 密钥，所以整理必须走 `pull_request_target`，且绝不执行投稿分支里的代码。
+- **Fork PR**：脚本用 `pull_request_target` **只检出 main 上的代码**，把投稿 md 当纯数据读入，在本仓库开一条 `ingest/pr-编号` 收录 PR（含 md + 图谱 JSON）。请合并收录 PR，原投稿 PR 可关闭。收录提交带有投稿者的 `Co-authored-by`。  
+- Fork PR **拿不到** API 密钥，所以整理必须走 `pull_request_target`，且绝不执行投稿分支里的代码。  
+- 站长请在仓库 Settings → Actions → General 打开 **Allow GitHub Actions to create and approve pull requests**，否则机器人无法为 fork 投稿创建收录 PR。  
+- 每日自动整理约 20 次；超出后请管理员给该 PR 打上 `ai-ok` 再跑。
 
 合并 main 之后，`deploy.yml` 会重新构建并发布 GitHub Pages。
 
@@ -55,7 +57,7 @@ cp experiences/TEMPLATE.md /tmp/sample.md
 npx tsx scripts/ingest.ts --dry-run --mock-response /tmp/mock-extract.json /tmp/sample.md
 ```
 
-需要真实模型时，在仓库 Secrets 配置 `GEMINI_API_KEY`（主）和 `SILICONFLOW_API_KEY`（备用）。都缺失时工作流会明确失败。
+需要真实模型时，在仓库 Secrets 配置 `GEMINI_API_KEY`（主）和 `SILICONFLOW_API_KEY`（备用）。可选 Variables：`GEMINI_CHAT_MODEL`（默认 `gemini-flash-latest`）、`GEMINI_EMBED_MODEL`（默认 `gemini-embedding-001`）、`GEMINI_EMBED_DIM`（默认 `768`）。都缺失或嵌入失败时工作流会明确失败，不会静默跳过近重判断。
 
 ---
 

@@ -63,6 +63,9 @@ export function validateExperience(raw: string, file: string): { ok: true; doc: 
   if (name === 'TEMPLATE.md') {
     return { ok: false, errors: ['TEMPLATE.md 是模板，请复制后改名再投稿（例如 2026-10-19-我的一件事.md）'] };
   }
+  if (/^YYYY-MM-DD/i.test(name) || /bian-ti\.md$/i.test(name)) {
+    errors.push(`「${name}」是占位文件名。请改成今天的日期加简短拼音或英文，例如 2026-10-19-bei-caiyuan.md（不要用 YYYY-MM-DD-bian-ti.md）`);
+  }
   if (!/^[a-zA-Z0-9._\u4e00-\u9fff-]{1,80}\.md$/.test(name)) {
     errors.push('文件名只能含字母、数字、中文、点、下划线和短横线，并以 .md 结尾');
   }

@@ -1,5 +1,7 @@
 {
-  "model": "text-embedding-004",
+  "model": "gemini-embedding-001",
   "dim": 768,
-  "vectors": {}
+  "encoding": "f16le-b64",
+  "vectors": {
+  }
 }

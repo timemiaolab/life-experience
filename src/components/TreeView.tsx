@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import type { AppData, GNode, Layer } from '../types';
 import { LAYERS, breakdown, codeOf, layerOf, linkKey, type Index, type View } from '../lib/graph';
 import { ORIGIN_COLORS, originLabel } from '../data/identity';
-import { clampPan } from '../lib/pan';
+import { clampPan, nudgePanForCards } from '../lib/pan';
 
 interface Props {
   data: AppData;
@@ -163,7 +163,6 @@ export function TreeView(p: Props) {
 
   const zoomRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
-  const rafRef = useRef(0);
   const onCanvasClickRef = useRef(p.onCanvasClick);
   onCanvasClickRef.current = p.onCanvasClick;
   const geoRef = useRef(geo);
@@ -177,14 +176,6 @@ export function TreeView(p: Props) {
     el.style.transform = `translate(${x}px, ${y}px) scale(${z})`;
     if (zoomLevelRef.current) zoomLevelRef.current.textContent = `${Math.round(z * 100)}%`;
   }, []);
-
-  const schedulePaint = useCallback(() => {
-    if (rafRef.current) return;
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = 0;
-      paint();
-    });
-  }, [paint]);
 
   const persistZoom = () => {
     try { localStorage.setItem('tree-zoom', String(zoomRef.current)); } catch { /* ignore */ }
@@ -202,14 +193,37 @@ export function TreeView(p: Props) {
       gridLeft: grid.offsetLeft,
       gridTop: grid.offsetTop,
       zoom: zoomRef.current,
+      scrollLeft: container.scrollLeft,
+      scrollTop: container.scrollTop,
     };
+  };
+
+  const foldScrollIntoPan = () => {
+    const container = scrollRef.current;
+    if (!container) return;
+    if (container.scrollLeft || container.scrollTop) {
+      panRef.current = {
+        x: panRef.current.x - container.scrollLeft,
+        y: panRef.current.y - container.scrollTop,
+      };
+      container.scrollLeft = 0;
+      container.scrollTop = 0;
+    }
   };
 
   const applyPanZoom = (next: { x: number; y: number }, zoom = zoomRef.current) => {
     zoomRef.current = zoom;
+    foldScrollIntoPan();
     const box = panBox();
     panRef.current = box ? clampPan(next, { ...box, zoom }) : next;
-    schedulePaint();
+    paint();
+    const container = scrollRef.current;
+    if (container && nodeEls.current.size) {
+      const view = container.getBoundingClientRect();
+      const cards = [...nodeEls.current.values()].map((el) => el.getBoundingClientRect());
+      panRef.current = nudgePanForCards(panRef.current, view, cards);
+      paint();
+    }
   };
 
   useLayoutEffect(() => {
@@ -222,16 +236,19 @@ export function TreeView(p: Props) {
 
   const handleZoomIn = () => { applyPanZoom(panRef.current, Math.min(zoomRef.current * 1.2, 2.5)); persistZoom(); };
   const handleZoomOut = () => { applyPanZoom(panRef.current, Math.max(zoomRef.current / 1.2, 0.3)); persistZoom(); };
-  const handleZoomReset = () => { zoomRef.current = 1; panRef.current = { x: 0, y: 0 }; persistZoom(); schedulePaint(); };
+  const handleZoomReset = () => {
+    const c = scrollRef.current;
+    if (c) { c.scrollLeft = 0; c.scrollTop = 0; }
+    applyPanZoom({ x: 0, y: 0 }, 1);
+    persistZoom();
+  };
   const handleZoomFit = () => {
     const container = scrollRef.current;
     const g = geoRef.current;
     if (!container || !g.w || !g.h) return;
     const scale = Math.min((container.clientWidth - 80) / g.w, (container.clientHeight - 80) / g.h, 1);
-    zoomRef.current = scale;
-    panRef.current = { x: 0, y: 0 };
+    applyPanZoom({ x: 0, y: 0 }, scale);
     persistZoom();
-    schedulePaint();
   };
 
   useEffect(() => {
@@ -301,6 +318,7 @@ export function TreeView(p: Props) {
   const handleMouseDown = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest('.node, button, .zoom-controls')) return;
+    foldScrollIntoPan();
     const start = { x: e.clientX, y: e.clientY, px: panRef.current.x, py: panRef.current.y, moved: false };
     e.preventDefault();
     const move = (ev: MouseEvent) => {
@@ -363,6 +381,14 @@ export function TreeView(p: Props) {
     return () => { ro.disconnect(); window.removeEventListener('resize', redraw); cancelAnimationFrame(raf); };
   }, [recalc]);
 
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => applyPanZoom(panRef.current));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const colRefs = useRef(new Map<Layer, HTMLElement>());
   useEffect(() => {
     if (!p.flashLayer) return;
@@ -391,7 +417,7 @@ export function TreeView(p: Props) {
 
   return (
     <div className="tree-area">
-      <div className="scroll" ref={scrollRef} onMouseDown={handleMouseDown}>
+      <div className="scroll" ref={scrollRef} onMouseDown={handleMouseDown} data-testid="tree-scroll">
         <div className={`inner${focusSet ? ' focus' : ''}`} ref={innerRef}>
           <LinkLayer geo={geo} focusSet={focusSet} fresh={fresh} />
           <div className="grid" ref={gridRef}>
@@ -434,10 +460,10 @@ export function TreeView(p: Props) {
         </div>
       </div>
       <div className="zoom-controls">
-        <button type="button" onClick={handleZoomIn} title="放大 (Ctrl/Cmd + Wheel)">+</button>
-        <button type="button" onClick={handleZoomOut} title="缩小">−</button>
-        <button type="button" onClick={handleZoomReset} title="重置">1:1</button>
-        <button type="button" onClick={handleZoomFit} title="适应屏幕">⊡</button>
+        <button type="button" data-testid="zoom-in" onClick={handleZoomIn} title="放大 (Ctrl/Cmd + Wheel)">+</button>
+        <button type="button" data-testid="zoom-out" onClick={handleZoomOut} title="缩小">−</button>
+        <button type="button" data-testid="zoom-reset" onClick={handleZoomReset} title="重置">1:1</button>
+        <button type="button" data-testid="zoom-fit" onClick={handleZoomFit} title="适应屏幕">⊡</button>
         <span className="zoom-level" ref={zoomLevelRef}>100%</span>
       </div>
     </div>
