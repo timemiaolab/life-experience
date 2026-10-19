@@ -70,7 +70,7 @@ export function TreeView(p: Props) {
     setPan({ x: 0, y: 0 });
   };
   
-  // Wheel: scroll without modifiers, zoom with Ctrl/Cmd
+  // Wheel zoom with Ctrl/Cmd (plain wheel uses native scrolling)
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
@@ -94,16 +94,8 @@ export function TreeView(p: Props) {
           y: mouseY - (mouseY - p.y) * zoomChange,
         }));
         setZoom(newZoom);
-      } else {
-        // Pan the view: vertical by default, horizontal with shift or deltaX
-        const dx = e.shiftKey ? e.deltaY : (e.deltaX || 0);
-        const dy = e.shiftKey ? 0 : e.deltaY;
-        
-        setPan((p) => ({
-          x: p.x - dx,
-          y: p.y - dy,
-        }));
       }
+      // Plain wheel (no Ctrl/Cmd): let native overflow:auto scrolling handle it
     };
     const el = innerRef.current?.parentElement;
     if (el) el.addEventListener('wheel', handleWheel, { passive: false });
@@ -195,7 +187,20 @@ export function TreeView(p: Props) {
       }
       
       if (panStart.current.moved) {
-        setPan({ x: panStart.current.px + dx, y: panStart.current.py + dy });
+        const container = innerRef.current?.parentElement;
+        if (!container) return;
+        
+        // Clamp pan so at least 100px of content stays visible
+        const minVisible = 100;
+        const maxX = container.clientWidth - minVisible;
+        const maxY = container.clientHeight - minVisible;
+        const minX = -(geo.w * zoom - minVisible);
+        const minY = -(geo.h * zoom - minVisible);
+        
+        const newX = Math.max(minX, Math.min(maxX, panStart.current.px + dx));
+        const newY = Math.max(minY, Math.min(maxY, panStart.current.py + dy));
+        
+        setPan({ x: newX, y: newY });
       }
     };
     
