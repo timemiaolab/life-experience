@@ -1,10 +1,9 @@
 ---
 title: 公共自行车办不了卡，决定做能扫码骑走的车
-origin: 县城
+origin: 未注明
 profession: 创业者
-region: 华东
-age: 80后
-city: 北京
+region: 未注明
+age: 未注明
 name: 胡玮炜
 curatedBy: 编辑部
 sourceUrl: https://yixi.tv/h5/speech/116/

@@ -6,13 +6,13 @@ export type IdentityDim = 'origin' | 'profession' | 'region' | 'age';
 
 /** 贡献者的身份标签（匿名，不含任何可识别个人信息） */
 export interface Identity {
-  /** 出身：农村 / 大山 / 县城 / 三线城市 / 二线城市 / 一线城市 */
+  /** 出身：农村 / 大山 / 县城 / 三线城市 / 二线城市 / 一线城市 / 未注明 */
   origin: string;
-  /** 职业：程序员 / 教师 / 护士 ... */
+  /** 职业：程序员 / 教师 / 护士 ... / 未注明（可自填） */
   profession: string;
-  /** 大区：华北 / 华东 / ... */
+  /** 大区：华北 / 华东 / ... / 未注明 */
   region: string;
-  /** 年龄段：00后 / 95后 ... */
+  /** 年龄段：00后 / 95后 ... / 未注明 */
   age: string;
   /** 可选：城市或省份（只做展示，不参与筛选） */
   city?: string;

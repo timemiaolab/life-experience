@@ -3,7 +3,7 @@ title: 村里说我是读书的料，我却总觉得自己只是运气好
 origin: 农村
 profession: 教师
 region: 华北
-age: 85后
+age: 未注明
 city: 北京
 name: 程猛
 curatedBy: 编辑部

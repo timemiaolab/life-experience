@@ -50,14 +50,14 @@ const JOBS: { file: string; extraction: IngestExtraction }[] = [
     extraction: {
       scenes: [
         {
-          title: '高考文科第一却凭想象填了英语专业',
-          desc: '安徽农村走出来，不知道怎么填志愿，大学万圣节派对不到一半就跑出去。',
+          title: '误打误撞报了华东师范大学英语专业',
+          desc: '安徽农村走出来，高考文科第一，误打误撞进了离原来生活很远的英语专业。',
           areaId: 'a3',
           tag: '求学',
         },
       ],
       principles: [
-        { action: 'merge', existingId: 'p1', title: '大事先问过来人，别只靠自己摸索', desc: '填志愿全凭想象，进了离自己生活很远的专业。', sceneIndexes: [0], ideaId: 'i1' },
+        { action: 'merge', existingId: 'p1', title: '大事先问过来人，别只靠自己摸索', desc: '误打误撞报了英语专业，大学万圣节派对不到一半就离开。', sceneIndexes: [0], ideaId: 'i1' },
         { action: 'merge', existingId: 'p11', title: '敢于走出熟悉的圈子去看看', desc: '精英大学里要推开门进去看看，不能只做题。', sceneIndexes: [0], ideaId: 'i1' },
       ],
       ideas: [
@@ -97,7 +97,7 @@ const JOBS: { file: string; extraction: IngestExtraction }[] = [
       scenes: [
         {
           title: '广告公司谈结构调整，人到中年去领失业金',
-          desc: '入行二十年，N+2 离开，社区窗口领每月约两千的失业金。',
+          desc: '这家公司待了五年多，入行二十年，N+2 离开，社区窗口领每月约两千的失业金。',
           areaId: 'a1',
           tag: '职场',
         },
@@ -172,7 +172,7 @@ const JOBS: { file: string; extraction: IngestExtraction }[] = [
       scenes: [
         {
           title: '汶川废墟上只有铁锹，回来把队伍建成综合救援',
-          desc: '面对几十吨楼板束手无策，回来坚持每周专业培训，民间必须能顶上。',
+          desc: '面对几十吨楼板束手无策，回来坚持每周专业培训。尼泊尔自费一人一两万，菲律宾是代表国家派出。',
           areaId: 'a1',
           tag: '创业',
         },
@@ -197,21 +197,19 @@ const JOBS: { file: string; extraction: IngestExtraction }[] = [
       scenes: [
         {
           title: '阳了逾期两天，催收电话打到家里和合伙人',
-          desc: '高烧七天没看手机，催收报出地址；找人协商还款才看见贩卖焦虑的灰产。',
+          desc: '高烧七天没看手机，催收报出地址；花钱买的协商方法在论坛上本来就有。仍在还款。',
           areaId: 'a2',
           tag: '理财',
         },
       ],
       principles: [
-        { action: 'merge', existingId: 'p2', title: '先存够 3–6 个月的应急钱', desc: '房贷加网贷上百万，手里周转不起下一个月的二十多万。', sceneIndexes: [0], ideaId: 'i2' },
-        { action: 'merge', existingId: 'p3', title: '看不懂的高回报，一律不碰', desc: '教人停息挂账、伪造证明的协商服务，本质是割还想还款的人。', sceneIndexes: [0], ideaId: 'i2' },
-        { action: 'merge', existingId: 'p4', title: '签字之前，把合同和规则逐条读完', desc: '网贷和催收规则要自己查，不能把手机卡交给代接的人。', sceneIndexes: [0], ideaId: 'i2' },
+        { action: 'merge', existingId: 'p2', title: '先存够 3–6 个月的应急钱', desc: '房贷加网贷上百万，逾期几天就要四处凑五万，手里没有能撑过账单的余钱。', sceneIndexes: [0], ideaId: 'i2' },
       ],
       ideas: [
         { action: 'merge', existingId: 'i2', title: '给自己留余地，才有底气', desc: '周转断裂时，余地比面子更重要。', meaningId: 'm1' },
       ],
       meanings: [
-        { action: 'merge', existingId: 'm1', title: '不被出身定义，把选择权握在自己手里', desc: '还想还的人，先别把选择权交给灰产。', },
+        { action: 'merge', existingId: 'm1', title: '不被出身定义，把选择权握在自己手里', desc: '正在还钱的人像想主动治疗的病人，别把选择权交给灰产。', },
       ],
     },
   },
@@ -249,8 +247,8 @@ const JOBS: { file: string; extraction: IngestExtraction }[] = [
     extraction: {
       scenes: [
         {
-          title: '转岗后加班到凌晨，妻子怀孕那次胎停了',
-          desc: '无论周末还是旅游都背着电脑，报警电话能把刚躺下的觉作废。',
+          title: '转岗后天天十点后下班，妻子那次怀孕胎停了',
+          desc: '2020年内部转岗后每天十点后下班。妻子当时那次怀孕后来胎停，他后悔没多留一点时间。',
           areaId: 'a2',
           tag: '健康',
         },
@@ -262,13 +260,11 @@ const JOBS: { file: string; extraction: IngestExtraction }[] = [
         },
       ],
       principles: [
-        { action: 'merge', existingId: 'p7', title: '身体发出信号时，立刻停下来', desc: '无限加班和胎停之后，才看清工作不是全部。', sceneIndexes: [0], ideaId: 'i5' },
-        { action: 'merge', existingId: 'p2', title: '先存够 3–6 个月的应急钱', desc: '两年前在长沙买了房，裁员后才有地方落脚。', sceneIndexes: [1], ideaId: 'i2' },
-        { action: 'merge', existingId: 'p8', title: '情绪上头时，先别做决定', desc: '没有精力去耗赔偿，先离开再找能喘气的工作。', sceneIndexes: [1], ideaId: 'i5' },
+        { action: 'merge', existingId: 'p7', title: '身体发出信号时，立刻停下来', desc: '转岗后的加班和那次胎停，让他看清工作不是全部。', sceneIndexes: [0], ideaId: 'i5' },
+        { action: 'merge', existingId: 'p11', title: '敢于走出熟悉的圈子去看看', desc: '离开待了十年的北京，改去长沙当高职老师。', sceneIndexes: [1], ideaId: 'i1' },
       ],
       ideas: [
-        { action: 'merge', existingId: 'i2', title: '给自己留余地，才有底气', desc: '一线城市的高薪抗风险能力并不强。', meaningId: 'm1' },
-        { action: 'merge', existingId: 'i5', title: '身体和情绪是一切的地基', desc: '先把人从报警电话旁边拉开。', meaningId: 'm2' },
+        { action: 'merge', existingId: 'i5', title: '身体和情绪是一切的地基', desc: '先把人从通宵加班里拉开。', meaningId: 'm2' },
       ],
       meanings: [
         { action: 'merge', existingId: 'm2', title: '成为一个可靠而温暖的人', desc: '收入少了，仍要在家庭和课堂上靠谱。', },
@@ -277,12 +273,21 @@ const JOBS: { file: string; extraction: IngestExtraction }[] = [
   },
 ];
 
+function alreadyApplied(graph: ReturnType<typeof loadGraph>, doc: { sourceUrl?: string; name?: string; file: string }): boolean {
+  return graph.contributions.some((c) => {
+    if (doc.sourceUrl && c.source?.url === doc.sourceUrl) return true;
+    if (doc.name && c.name === doc.name && c.engine === 'curated') return true;
+    return false;
+  });
+}
+
 function main() {
   let graph = loadGraph();
   const embeddings = loadEmbeddings();
   const beforeNodes = graph.nodes.length;
   const beforeContrib = graph.contributions.length;
   const reports: string[] = [];
+  let changed = false;
 
   for (const job of JOBS) {
     const path = join(DIR, job.file);
@@ -291,6 +296,10 @@ function main() {
       console.error(`${job.file} 校验失败：\n- ${parsed.errors.join('\n- ')}`);
       process.exit(1);
     }
+    if (alreadyApplied(graph, parsed.doc)) {
+      reports.push(`跳过 ${basename(job.file)}：来源已在图谱中`);
+      continue;
+    }
     const v = validateExtraction(job.extraction, graph);
     if (!v.ok) {
       console.error(`${job.file} 抽取不合法：${v.error}`);
@@ -298,6 +307,7 @@ function main() {
     }
     const applied = applyExtraction(graph, parsed.doc, v.value, embeddings, []);
     graph = applied.graph;
+    changed = true;
     reports.push(
       [
         `文件：${basename(job.file)}`,
@@ -308,9 +318,9 @@ function main() {
     );
   }
 
-  saveGraph(graph);
+  if (changed) saveGraph(graph);
   console.log(reports.join('\n\n'));
-  console.log(`\n节点 ${beforeNodes} → ${graph.nodes.length}，贡献 ${beforeContrib} → ${graph.contributions.length}`);
+  console.log(`\n节点 ${beforeNodes} → ${graph.nodes.length}，贡献 ${beforeContrib} → ${graph.contributions.length}${changed ? '' : '（无写入）'}`);
 }
 
 main();
