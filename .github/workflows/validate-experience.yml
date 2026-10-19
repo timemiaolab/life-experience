@@ -1,0 +1,21 @@
+name: Validate experience
+
+on:
+  pull_request:
+    paths:
+      - 'experiences/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: 校验投稿文件
+        run: bash scripts/validate-experience-pr.sh

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 投稿一篇经历（推荐）
+    url: https://github.com/timemiaolab/life-experience/blob/main/CONTRIBUTING.md
+    about: 请不要用 Issue 贴经历。用 GitHub 网页在 experiences/ 新增 Markdown，会自动打开 Pull Request。

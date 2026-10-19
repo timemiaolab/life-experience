@@ -19,112 +19,20 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
       with:
         node-version: '20'
         cache: 'npm'
-        
-    - name: Install dependencies
-      run: npm ci
-      
+    - run: npm ci
     - name: Build frontend
       run: npm run build
       env:
-        # Use production Supabase config
-        VITE_SUPABASE_URL: https://fivighqyyxlhjhicuwvv.supabase.co
-        VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdmlnaHF5eXhsaGpoaWN1d3Z2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzNzQ5MDQsImV4cCI6MjEwNzk1MDkwNH0.Yu3o2jvrBa4VTC5dpIajjNBJltUyxkyKLze9PhxB5Uw
-        # Set base path for GitHub Pages
         VITE_BASE_PATH: /life-experience/
-        
-    - name: Setup Pages
-      uses: actions/configure-pages@v4
-      
-    - name: Upload artifact
-      uses: actions/upload-pages-artifact@v3
+    - uses: actions/configure-pages@v4
+    - uses: actions/upload-pages-artifact@v3
       with:
         path: ./dist
-        
-    - name: Deploy to GitHub Pages
-      id: deployment
+    - id: deployment
       uses: actions/deploy-pages@v4
-
-  apply-migrations:
-    runs-on: ubuntu-latest
-    needs: build-and-deploy
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Apply Supabase migrations
-      env:
-        SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        SUPABASE_PROJECT_REF: fivighqyyxlhjhicuwvv
-      run: |
-        # Check if token is available
-        if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
-          echo "⚠️ SUPABASE_ACCESS_TOKEN secret not set, skipping migrations."
-          echo "To enable automatic migrations, add SUPABASE_ACCESS_TOKEN to repository secrets."
-          echo "Get your access token from: https://supabase.com/dashboard/account/tokens"
-          exit 0
-        fi
-        
-        echo "Applying migrations to Supabase project $SUPABASE_PROJECT_REF..."
-        
-        # Helper function to execute SQL via Management API
-        execute_sql() {
-          local sql="$1"
-          curl -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
-            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"query\": $(echo "$sql" | jq -Rs .)}" \
-            --fail-with-body
-        }
-        
-        # Ensure migration tracking table exists
-        echo "Ensuring migration tracking table exists..."
-        execute_sql "CREATE SCHEMA IF NOT EXISTS supabase_migrations; CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());" || {
-          echo "❌ Failed to create migration tracking table"
-          exit 1
-        }
-        
-        # List migration files in order
-        MIGRATIONS=$(ls -1 supabase/migrations/*.sql | sort)
-        
-        for migration_file in $MIGRATIONS; do
-          migration_version=$(basename "$migration_file" .sql)
-          
-          # Check if migration already applied
-          check_query="SELECT EXISTS(SELECT 1 FROM supabase_migrations.schema_migrations WHERE version = '$migration_version')"
-          result=$(execute_sql "$check_query" | jq -r '.[0].exists // false')
-          
-          if [ "$result" = "true" ]; then
-            echo "⏭️  Skipping $migration_version (already applied)"
-            continue
-          fi
-          
-          echo "Applying $migration_version..."
-          MIGRATION_SQL=$(cat "$migration_file")
-          
-          # Apply migration
-          execute_sql "$MIGRATION_SQL" || {
-            echo "❌ Migration $migration_version failed"
-            exit 1
-          }
-          
-          # Mark as applied
-          execute_sql "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('$migration_version') ON CONFLICT DO NOTHING" || {
-            echo "❌ CRITICAL: Could not mark $migration_version as applied"
-            exit 1
-          }
-          
-          echo "✓ Applied $migration_version"
-        done
-        
-        echo "✓ All migrations applied successfully"
